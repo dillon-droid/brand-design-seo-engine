@@ -19,7 +19,7 @@ Internal SEO workbench for Brand Design Co. — keyword research, rank tracking,
 - Vite + React 18 + TypeScript + Wouter + TanStack Query + shadcn/ui + Tailwind
 - Hono on Vercel serverless `/api/*` routes
 - Neon Postgres + Drizzle ORM
-- Anthropic Claude (Sonnet 4.6 for keywords, Opus 4.7 for articles), prompt caching on BrandScript context
+- Google Gemini (`gemini-2.5-flash` for keywords, `gemini-2.5-pro` for articles) with structured JSON output
 - Google Search Console via shared service account
 
 ## Local development
@@ -28,7 +28,7 @@ Internal SEO workbench for Brand Design Co. — keyword research, rank tracking,
 
 - Node 20+ and pnpm
 - A Neon Postgres database
-- An Anthropic API key
+- A Google Gemini API key (free at https://aistudio.google.com/apikey)
 - A Google Cloud service account with Search Console API enabled
 
 ### Setup
@@ -36,7 +36,7 @@ Internal SEO workbench for Brand Design Co. — keyword research, rank tracking,
 ```bash
 pnpm install
 cp .env.example .env
-# fill in DATABASE_URL, ANTHROPIC_API_KEY, AUTH_SECRET, GOOGLE_SA_KEY_B64
+# fill in DATABASE_URL, GEMINI_API_KEY, AUTH_SECRET, GOOGLE_SA_KEY_B64
 pnpm db:generate          # generates SQL migration files
 pnpm db:migrate           # applies migrations to Neon
 pnpm add-user you@branddesignco.com   # provision your first team member
@@ -71,7 +71,7 @@ Re-running with an existing email resets the password.
 
 1. Push this repo to GitHub
 2. Import into Vercel
-3. Set env vars in Vercel project settings: `DATABASE_URL`, `ANTHROPIC_API_KEY`, `AUTH_SECRET` (32-byte hex), `GOOGLE_SA_KEY_B64`
+3. Set env vars in Vercel project settings: `DATABASE_URL`, `GEMINI_API_KEY`, `AUTH_SECRET` (32-byte hex), `GOOGLE_SA_KEY_B64`
 4. Deploy. Vercel detects Vite + serverless `/api/*`
 5. Run migrations once locally with the production `DATABASE_URL`: `DATABASE_URL=... pnpm db:migrate`
 6. Provision users via `DATABASE_URL=... pnpm add-user ...`
@@ -83,7 +83,7 @@ The team accesses the deployment URL and signs in.
 ```
 src/                React SPA (Vite)
 api/[[...path]].ts  single Hono handler — Vercel routes all /api/* here
-server/             Hono app + db client + Anthropic + GSC libs
+server/             Hono app + db client + Google Gemini + GSC libs
 server/db/          Drizzle schema + migrations
 scripts/            CLI utilities (add-user)
 ```

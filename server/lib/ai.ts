@@ -1,16 +1,16 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI, Type } from "@google/genai";
 import type { schema } from "../db/client";
 
-const apiKey = process.env.ANTHROPIC_API_KEY;
+const apiKey = process.env.GEMINI_API_KEY;
 if (!apiKey) {
-  console.warn("ANTHROPIC_API_KEY is not set — AI calls will fail");
+  console.warn("GEMINI_API_KEY is not set — AI calls will fail");
 }
 
-export const anthropic = new Anthropic({ apiKey });
+const ai = new GoogleGenAI({ apiKey: apiKey ?? "" });
 
 export const MODELS = {
-  fast: "claude-sonnet-4-6",
-  smart: "claude-opus-4-7",
+  fast: "gemini-2.5-flash",
+  smart: "gemini-2.5-pro",
 } as const;
 
 type Company = typeof schema.companies.$inferSelect;
@@ -45,13 +45,6 @@ export function brandContext(company: Company | null | undefined): string {
   return lines.join("\n");
 }
 
-function extractText(msg: Anthropic.Messages.Message): string {
-  return msg.content
-    .filter((b): b is Anthropic.Messages.TextBlock => b.type === "text")
-    .map((b) => b.text)
-    .join("\n");
-}
-
 function parseJson<T>(raw: string): T {
   const trimmed = raw.trim();
   const fenced = trimmed.match(/```json\s*([\s\S]*?)```/);
@@ -69,6 +62,28 @@ export type KeywordResult = {
   rationale?: string;
 };
 
+const KEYWORD_LIST_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    results: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          keyword: { type: Type.STRING },
+          searchVolume: { type: Type.NUMBER },
+          difficulty: { type: Type.NUMBER },
+          cpc: { type: Type.NUMBER },
+          competition: { type: Type.STRING },
+          intent: { type: Type.STRING },
+          rationale: { type: Type.STRING },
+        },
+        propertyOrdering: ["keyword", "searchVolume", "difficulty", "cpc", "competition", "intent", "rationale"],
+      },
+    },
+  },
+};
+
 export async function suggestKeywords({
   industry,
   company,
@@ -76,31 +91,21 @@ export async function suggestKeywords({
   industry: string;
   company: Company | null;
 }): Promise<KeywordResult[]> {
-  const system = [
-    {
-      type: "text" as const,
-      text: `You are an SEO strategist. Suggest 25 high-value keyword opportunities the client could target. Return STRICT JSON: {"results": [{"keyword": string, "searchVolume": number, "difficulty": number (0-100), "cpc": number (USD), "competition": "Low"|"Medium"|"High", "intent": "informational"|"commercial"|"transactional"|"navigational", "rationale": string}]}. Volumes/difficulty/CPC are best estimates.`,
-    },
-    {
-      type: "text" as const,
-      text: `CLIENT BRAND CONTEXT (cache this):\n${brandContext(company)}`,
-      cache_control: { type: "ephemeral" as const },
-    },
-  ];
+  const sys = `You are an SEO strategist. Suggest 25 high-value keyword opportunities the client could target. Volumes/difficulty/CPC are best estimates. competition: Low|Medium|High. intent: informational|commercial|transactional|navigational.
 
-  const msg = await anthropic.messages.create({
+CLIENT BRAND CONTEXT:
+${brandContext(company)}`;
+
+  const r = await ai.models.generateContent({
     model: MODELS.fast,
-    max_tokens: 4096,
-    system,
-    messages: [
-      {
-        role: "user",
-        content: `Industry: ${industry}. Suggest 25 keywords with a healthy mix of head terms, mid-tail, and long-tail. Bias toward commercial intent for service businesses. JSON only.`,
-      },
-    ],
+    contents: `Industry: ${industry}. Suggest 25 keywords with a healthy mix of head terms, mid-tail, and long-tail. Bias toward commercial intent for service businesses.`,
+    config: {
+      systemInstruction: sys,
+      responseMimeType: "application/json",
+      responseSchema: KEYWORD_LIST_SCHEMA,
+    },
   });
-  const out = parseJson<{ results: KeywordResult[] }>(extractText(msg));
-  return out.results || [];
+  return parseJson<{ results: KeywordResult[] }>(r.text ?? "").results || [];
 }
 
 export async function researchKeyword({
@@ -112,38 +117,35 @@ export async function researchKeyword({
   industry: string;
   company: Company | null;
 }): Promise<KeywordResult[]> {
-  const system = [
-    {
-      type: "text" as const,
-      text: `You are an SEO strategist doing deep keyword research. For a seed keyword, return 30 related keywords organized as: 10 close variations, 10 long-tail opportunities, 10 questions people ask. JSON only: {"results": [{"keyword": string, "searchVolume": number, "difficulty": number, "cpc": number, "competition": string, "intent": string, "rationale": string}]}.`,
-    },
-    {
-      type: "text" as const,
-      text: `CLIENT BRAND CONTEXT:\n${brandContext(company)}`,
-      cache_control: { type: "ephemeral" as const },
-    },
-  ];
-  const msg = await anthropic.messages.create({
+  const sys = `You are an SEO strategist doing deep keyword research. For the seed keyword, return 30 related keywords organized as: 10 close variations, 10 long-tail opportunities, 10 questions people ask.
+
+CLIENT BRAND CONTEXT:
+${brandContext(company)}`;
+
+  const r = await ai.models.generateContent({
     model: MODELS.fast,
-    max_tokens: 6000,
-    system,
-    messages: [
-      { role: "user", content: `Seed keyword: "${seedKeyword}". Industry: ${industry || "(unspecified)"}. Return 30 results as JSON.` },
-    ],
+    contents: `Seed keyword: "${seedKeyword}". Industry: ${industry || "(unspecified)"}. Return 30 results.`,
+    config: {
+      systemInstruction: sys,
+      responseMimeType: "application/json",
+      responseSchema: KEYWORD_LIST_SCHEMA,
+    },
   });
-  return parseJson<{ results: KeywordResult[] }>(extractText(msg)).results || [];
+  return parseJson<{ results: KeywordResult[] }>(r.text ?? "").results || [];
 }
 
 export async function estimateDifficultyForQueries(queries: string[]): Promise<Record<string, number>> {
   if (queries.length === 0) return {};
-  const msg = await anthropic.messages.create({
+  const r = await ai.models.generateContent({
     model: MODELS.fast,
-    max_tokens: 2000,
-    system: `Estimate SEO keyword difficulty (0-100) for each query. JSON only: {"<query>": <number>, ...}`,
-    messages: [{ role: "user", content: JSON.stringify(queries) }],
+    contents: JSON.stringify(queries),
+    config: {
+      systemInstruction: `Estimate SEO keyword difficulty (0-100) for each query. Return JSON: {"<query>": <number>, ...}`,
+      responseMimeType: "application/json",
+    },
   });
   try {
-    return parseJson<Record<string, number>>(extractText(msg));
+    return parseJson<Record<string, number>>(r.text ?? "");
   } catch {
     return {};
   }
@@ -156,6 +158,19 @@ export type GeneratedArticle = {
   html: string;
   seoScore: number;
   wordCount: number;
+};
+
+const ARTICLE_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    title: { type: Type.STRING },
+    metaDescription: { type: Type.STRING },
+    markdown: { type: Type.STRING },
+    html: { type: Type.STRING },
+    seoScore: { type: Type.NUMBER },
+    wordCount: { type: Type.NUMBER },
+  },
+  propertyOrdering: ["title", "metaDescription", "markdown", "html", "seoScore", "wordCount"],
 };
 
 export async function generateArticle({
@@ -173,10 +188,7 @@ export async function generateArticle({
 }): Promise<GeneratedArticle> {
   const wordTarget = length === "short" ? 800 : length === "long" ? 2500 : 1500;
 
-  const system = [
-    {
-      type: "text" as const,
-      text: `You are a senior SEO content writer for Brand Design Co., a marketing agency that uses StoryBrand. Write articles in the client's brand voice that:
+  const sys = `You are a senior SEO content writer for Brand Design Co., a marketing agency that uses StoryBrand. Write articles in the client's brand voice that:
 - Open with the reader's specific problem and emotional state
 - Position the brand as the trusted guide
 - Use SEO-optimized heading structure (H1 once, H2/H3 logical hierarchy)
@@ -187,22 +199,10 @@ export async function generateArticle({
 - Use natural keyword placement (target keyword in H1, intro, one H2, conclusion; secondary keywords woven naturally — never stuffed)
 - Include internal linking suggestions in [brackets]
 
-Return STRICT JSON only:
-{
-  "title": "<60 char SEO title>",
-  "metaDescription": "<150-160 char meta>",
-  "markdown": "<full article in markdown>",
-  "html": "<full article as semantic HTML, no <html>/<body> wrapper, just the article body>",
-  "seoScore": <0-100>,
-  "wordCount": <integer>
-}`,
-    },
-    {
-      type: "text" as const,
-      text: `CLIENT BRAND CONTEXT (cache this):\n${brandContext(company)}`,
-      cache_control: { type: "ephemeral" as const },
-    },
-  ];
+For "html", return semantic HTML for the article body only — no <html>/<body> wrapper. For "title" stay under 60 chars. For "metaDescription" stay 150-160 chars.
+
+CLIENT BRAND CONTEXT:
+${brandContext(company)}`;
 
   const userPrompt = `
 Target keyword: ${targetKeyword}
@@ -218,16 +218,18 @@ StoryBrand quiz answers from the writer:
 - What does success look like: ${quizAnswers.whatDoesSuccessLook || "(not provided)"}
 - What happens if they don't act: ${quizAnswers.whatHappensIfTheyDont || "(not provided)"}
 
-Write the article. JSON only.`.trim();
+Write the article.`.trim();
 
-  const msg = await anthropic.messages.create({
+  const r = await ai.models.generateContent({
     model: MODELS.smart,
-    max_tokens: 8192,
-    system,
-    messages: [{ role: "user", content: userPrompt }],
+    contents: userPrompt,
+    config: {
+      systemInstruction: sys,
+      responseMimeType: "application/json",
+      responseSchema: ARTICLE_SCHEMA,
+    },
   });
-  const out = parseJson<GeneratedArticle>(extractText(msg));
-  // sanity: word count if missing
+  const out = parseJson<GeneratedArticle>(r.text ?? "");
   if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;
   if (!out.seoScore) out.seoScore = 75;
   return out;

@@ -14,7 +14,7 @@ import {
   verifyPassword,
   type AuthedUser,
 } from "./lib/auth";
-import { suggestKeywords, researchKeyword, generateArticle } from "./lib/anthropic";
+import { suggestKeywords, researchKeyword, generateArticle } from "./lib/ai";
 import { fetchRankings, mineOpportunities } from "./lib/gsc";
 
 type Env = { Variables: { user: AuthedUser } };
