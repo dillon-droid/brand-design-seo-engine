@@ -1,0 +1,18 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pnpm install *)",
+      "Bash(pnpm approve-builds *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(pnpm build *)",
+      "Bash(DATABASE_URL=postgres://x:y@localhost/z pnpm db:generate)",
+      "Bash(DATABASE_URL=\"postgres://x:y@localhost/z\" timeout 5 pnpm dev:server)",
+      "Bash(node --experimental-strip-types --no-warnings -e ' *)",
+      "Bash(pnpm tsx -e ' *)",
+      "Bash(grep -v \"^\\\\.$\")",
+      "Bash(gh auth *)",
+      "Bash(git --version)",
+      "Bash(brew --version)"
+    ]
+  }
+}
