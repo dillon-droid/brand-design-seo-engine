@@ -50,7 +50,8 @@
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Upgrade @vercel/node from 3.2 to 5.7 — v5 auto-bundles function dependencies\")",
       "Bash(curl -s --max-time 10 -w \"\\\\n[HTTP %{http_code}]\\\\n\" \"https://brand-design-seo-engine.vercel.app/api/_diag\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: minimal handler with no server imports\")",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: incrementally test which imports fail\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: incrementally test which imports fail\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Rename api/_server/ to api/lib/ — underscore prefix excluded directory from Vercel deployment\")"
     ]
   }
 }
