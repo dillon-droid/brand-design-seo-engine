@@ -7,7 +7,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     let importOk = false;
     let importError: string | null = null;
     try {
-      await import("../server/app");
+      await import("./_server/app");
       importOk = true;
     } catch (e) {
       importError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
@@ -31,7 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const { default: app } = await import("../server/app");
+    const { default: app } = await import("./_server/app");
 
     const protocol = (req.headers["x-forwarded-proto"] as string) || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";

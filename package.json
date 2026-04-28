@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "db:generate": "drizzle-kit generate",
-    "db:migrate": "tsx server/db/migrate.ts",
+    "db:migrate": "tsx api/_server/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "add-user": "tsx scripts/add-user.ts"
   },

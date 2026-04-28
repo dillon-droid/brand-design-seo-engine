@@ -43,7 +43,8 @@
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use api/index.ts as Vercel-Node bridge to Hono — rewrite /api/* to /api preserving original URL\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: add /api/_debug to confirm env vars in production\")",
       "Bash(rm api/_debug.ts)",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: lazy import + error capture + /api/_diag\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: lazy import + error capture + /api/_diag\")",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Move server/* under api/_server/* so Vercel bundles imports into the function *)"
     ]
   }
 }
