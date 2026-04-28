@@ -1,17 +1,10 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
+import app from "./_server/app";
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
-  // Diagnostic mode: hit /api/_diag to see env + import status
+  // Diagnostic mode: hit /api/_diag to see env state
   if (req.url?.startsWith("/api/_diag")) {
     const present = (n: string) => Boolean(process.env[n] && process.env[n]!.length > 0);
-    let importOk = false;
-    let importError: string | null = null;
-    try {
-      await import("./_server/app");
-      importOk = true;
-    } catch (e) {
-      importError = e instanceof Error ? `${e.name}: ${e.message}` : String(e);
-    }
     res.status(200).json({
       ok: true,
       reqUrl: req.url,
@@ -22,17 +15,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         AUTH_SECRET: present("AUTH_SECRET"),
         GOOGLE_SA_KEY_B64: present("GOOGLE_SA_KEY_B64"),
       },
-      ALL_DB_VARS: Object.keys(process.env).filter((k) => /POSTGRES|DATABASE|NEON/i.test(k)),
-      importOk,
-      importError,
       nodeVersion: process.version,
     });
     return;
   }
 
   try {
-    const { default: app } = await import("./_server/app");
-
     const protocol = (req.headers["x-forwarded-proto"] as string) || "https";
     const host = req.headers["x-forwarded-host"] || req.headers.host || "localhost";
     const url = `${protocol}://${host}${req.url || "/"}`;
