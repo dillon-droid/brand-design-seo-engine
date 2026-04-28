@@ -40,7 +40,10 @@
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use single-bracket catchall for Vercel API route — [[...path]] is Next.js-specific\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Add /api/ping for routing diagnostics\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use @vercel/node req/res style for ping\")",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use api/index.ts as Vercel-Node bridge to Hono — rewrite /api/* to /api preserving original URL\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use api/index.ts as Vercel-Node bridge to Hono — rewrite /api/* to /api preserving original URL\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: add /api/_debug to confirm env vars in production\")",
+      "Bash(rm api/_debug.ts)",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: lazy import + error capture + /api/_diag\")"
     ]
   }
 }
