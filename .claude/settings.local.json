@@ -46,7 +46,8 @@
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: lazy import + error capture + /api/_diag\")",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Move server/* under api/_server/* so Vercel bundles imports into the function *)",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use static import for server app so esbuild bundles it into the function\")",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Drop framework: vite from vercel.json so @vercel/node bundles api/\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Drop framework: vite from vercel.json so @vercel/node bundles api/\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Upgrade @vercel/node from 3.2 to 5.7 — v5 auto-bundles function dependencies\")"
     ]
   }
 }
