@@ -51,7 +51,9 @@
       "Bash(curl -s --max-time 10 -w \"\\\\n[HTTP %{http_code}]\\\\n\" \"https://brand-design-seo-engine.vercel.app/api/_diag\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: minimal handler with no server imports\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: incrementally test which imports fail\")",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Rename api/_server/ to api/lib/ — underscore prefix excluded directory from Vercel deployment\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Rename api/_server/ to api/lib/ — underscore prefix excluded directory from Vercel deployment\")",
+      "Bash(rm scripts/build-api.mjs)",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: test if api/lib/ is deployed\")"
     ]
   }
 }
