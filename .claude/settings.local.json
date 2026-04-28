@@ -28,7 +28,19 @@
       "Bash(pnpm db:migrate)",
       "Bash(pnpm tsx *)",
       "Bash(pnpm remove *)",
-      "Bash(pnpm add *)"
+      "Bash(pnpm add *)",
+      "Bash(curl -s -o /dev/null -w '%{http_code}' -L --max-time 10 __TRACKED_VAR__/api/auth/me)",
+      "Bash(curl -s -L \"https://brand-design-seo-engine.vercel.app/api/auth/me\")",
+      "Bash(curl -s -L \"https://brand-design-seo-engine.vercel.app/\")",
+      "Bash(git add *)",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Fix Vercel rewrites swallowing /api/* — use negative lookahead so /api routes hit serverless functions instead of index.html\")",
+      "Bash(git push *)",
+      "Bash(curl -sv --max-time 10 \"https://brand-design-seo-engine.vercel.app/api/auth/me\")",
+      "Bash(git mv *)",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use single-bracket catchall for Vercel API route — [[...path]] is Next.js-specific\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Add /api/ping for routing diagnostics\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use @vercel/node req/res style for ping\")",
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Use api/index.ts as Vercel-Node bridge to Hono — rewrite /api/* to /api preserving original URL\")"
     ]
   }
 }
