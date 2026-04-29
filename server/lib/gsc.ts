@@ -1,19 +1,9 @@
-import { google } from "googleapis";
+import { google, type searchconsole_v1, type Auth } from "googleapis";
 
-function getCreds() {
-  const b64 = process.env.GOOGLE_SA_KEY_B64;
-  if (!b64) throw new Error("GOOGLE_SA_KEY_B64 is not set");
-  const json = JSON.parse(Buffer.from(b64, "base64").toString("utf8"));
-  return json as { client_email: string; private_key: string };
-}
+type OAuth2Client = Auth.OAuth2Client;
+export type { OAuth2Client };
 
-function searchconsole() {
-  const creds = getCreds();
-  const auth = new google.auth.JWT({
-    email: creds.client_email,
-    key: creds.private_key,
-    scopes: ["https://www.googleapis.com/auth/webmasters.readonly"],
-  });
+function searchconsole(auth: OAuth2Client): searchconsole_v1.Searchconsole {
   return google.searchconsole({ version: "v1", auth });
 }
 
@@ -24,19 +14,24 @@ function dateRange(days: number) {
   return { startDate: fmt(start), endDate: fmt(end) };
 }
 
-async function resolveSiteUrl(domain: string): Promise<string> {
-  const sc = searchconsole();
+async function resolveSiteUrl(auth: OAuth2Client, domain: string): Promise<string> {
+  const sc = searchconsole(auth);
   const { data } = await sc.sites.list();
   const sites = (data.siteEntry || []).map((s) => s.siteUrl).filter(Boolean) as string[];
+  if (sites.length === 0) {
+    throw new Error(
+      "Your Google account has no Search Console properties. Make sure you're signed into the right Google account.",
+    );
+  }
   const norm = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "").toLowerCase();
-  // prefer domain property
-  const domainProp = sites.find((s) => s === `sc-domain:${norm}` || s.toLowerCase().includes(`sc-domain:${norm}`));
+  const domainProp = sites.find((s) => s.toLowerCase() === `sc-domain:${norm}`);
   if (domainProp) return domainProp;
-  // then https://www.x/
   const urlProp = sites.find((s) => s.toLowerCase().includes(norm));
   if (urlProp) return urlProp;
   if (domain.startsWith("sc-domain:") || domain.startsWith("http")) return domain;
-  throw new Error(`No verified GSC property matches "${domain}". Make sure the service account is granted access.`);
+  throw new Error(
+    `No verified GSC property matches "${domain}". Available: ${sites.slice(0, 5).join(", ")}${sites.length > 5 ? "…" : ""}`,
+  );
 }
 
 export type RankingRow = {
@@ -48,16 +43,16 @@ export type RankingRow = {
   ctr: number;
 };
 
-async function querySearchAnalytics(siteUrl: string, days: number, dimensions: string[]) {
-  const sc = searchconsole();
+async function querySearchAnalytics(auth: OAuth2Client, siteUrl: string, days: number, dimensions: string[]) {
+  const sc = searchconsole(auth);
   const { startDate, endDate } = dateRange(days);
-  const all: any[] = [];
+  const all: searchconsole_v1.Schema$ApiDataRow[] = [];
   let startRow = 0;
   const rowLimit = 5000;
   while (true) {
     const { data } = await sc.searchanalytics.query({
       siteUrl,
-      requestBody: { startDate, endDate, dimensions, rowLimit, startRow, dataState: "final" as any },
+      requestBody: { startDate, endDate, dimensions, rowLimit, startRow, dataState: "final" },
     });
     const rows = data.rows || [];
     all.push(...rows);
@@ -69,9 +64,11 @@ async function querySearchAnalytics(siteUrl: string, days: number, dimensions: s
 }
 
 export async function fetchRankings({
+  auth,
   siteUrl: input,
   days,
 }: {
+  auth: OAuth2Client;
   siteUrl: string;
   days: number;
 }): Promise<{
@@ -79,8 +76,8 @@ export async function fetchRankings({
   rows: RankingRow[];
   totals: { clicks: number; impressions: number; avgPosition: number; page1Count: number };
 }> {
-  const siteUrl = await resolveSiteUrl(input);
-  const raw = await querySearchAnalytics(siteUrl, days, ["query", "page"]);
+  const siteUrl = await resolveSiteUrl(auth, input);
+  const raw = await querySearchAnalytics(auth, siteUrl, days, ["query", "page"]);
 
   const rows: RankingRow[] = raw.map((r) => ({
     query: r.keys?.[0] ?? "",
@@ -115,24 +112,24 @@ export type GscOpportunity = {
   reason: string;
 };
 
-// Rough CTR-by-position baseline (Advanced Web Ranking 2024 averages).
 const CTR_BASELINE: Record<number, number> = {
   1: 0.279, 2: 0.157, 3: 0.11, 4: 0.077, 5: 0.054, 6: 0.04, 7: 0.031, 8: 0.024, 9: 0.019, 10: 0.016,
 };
 
 export async function mineOpportunities({
+  auth,
   siteUrl: input,
   days,
 }: {
+  auth: OAuth2Client;
   siteUrl: string;
   days: number;
 }): Promise<{ siteUrl: string; buckets: Record<GscBucket, GscOpportunity[]> }> {
-  const siteUrl = await resolveSiteUrl(input);
+  const siteUrl = await resolveSiteUrl(auth, input);
 
-  const current = await querySearchAnalytics(siteUrl, days, ["query", "page"]);
-  const prior = await querySearchAnalytics(siteUrl, days * 2, ["query"]);
+  const current = await querySearchAnalytics(auth, siteUrl, days, ["query", "page"]);
+  const prior = await querySearchAnalytics(auth, siteUrl, days * 2, ["query"]);
 
-  // Build prior-period totals (subtract current from full-window to get "previous window")
   const currentByQuery = new Map<string, number>();
   for (const r of current) {
     const q = r.keys?.[0] ?? "";
@@ -195,7 +192,6 @@ export async function mineOpportunities({
     }
   }
 
-  // Sort each bucket by impressions desc, cap to 25 per bucket
   const cap = 25;
   return {
     siteUrl,
@@ -206,4 +202,13 @@ export async function mineOpportunities({
       rising: rising.sort((a, b) => b.impressions - a.impressions).slice(0, cap),
     },
   };
+}
+
+export async function listSites(auth: OAuth2Client) {
+  const sc = searchconsole(auth);
+  const { data } = await sc.sites.list();
+  return (data.siteEntry || []).map((s) => ({
+    siteUrl: s.siteUrl ?? "",
+    permissionLevel: s.permissionLevel ?? "",
+  }));
 }

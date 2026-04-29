@@ -10,6 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { formatNumber } from "@/lib/utils";
+import { GoogleConnect } from "@/components/GoogleConnect";
 
 type Row = {
   query: string;
@@ -44,6 +45,8 @@ export function RankingsPage() {
         <h1 className="text-3xl font-extrabold font-display text-foreground mb-1">Site Rankings</h1>
         <p className="text-sm text-muted-foreground">Pull live keyword rankings from Google Search Console.</p>
       </div>
+
+      <GoogleConnect />
 
       <Card className="mb-6">
         <CardContent className="p-5">

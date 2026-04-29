@@ -5,6 +5,12 @@ export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   passwordHash: text("password_hash").notNull(),
   name: text("name"),
+  // Google OAuth — populated when user clicks "Connect Google"
+  googleEmail: text("google_email"),
+  googleAccessToken: text("google_access_token"),
+  googleRefreshToken: text("google_refresh_token"),
+  googleTokenExpiresAt: timestamp("google_token_expires_at", { withTimezone: true }),
+  googleScopes: text("google_scopes"),
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
 });
 

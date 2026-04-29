@@ -11,6 +11,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { IndustrySelect } from "@/components/CompanyForm";
+import { GoogleConnect } from "@/components/GoogleConnect";
 import { formatNumber } from "@/lib/utils";
 
 type KeywordResult = {
@@ -312,6 +313,7 @@ function GscOpportunityPanel({
   return (
     <Card>
       <CardContent className="p-5">
+        <GoogleConnect />
         <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3 items-end">
           <div className="md:col-span-2">
             <Label>GSC Site URL</Label>

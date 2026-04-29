@@ -15,7 +15,19 @@ import {
   type AuthedUser,
 } from "./lib/auth";
 import { suggestKeywords, researchKeyword, generateArticle } from "./lib/ai";
-import { fetchRankings, mineOpportunities } from "./lib/gsc";
+import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
+import {
+  buildAuthUrl,
+  disconnect as disconnectGoogle,
+  exchangeCode,
+  fetchUserEmail,
+  getStatus as getGoogleStatus,
+  getUserClient,
+  isOAuthConfigured,
+  saveTokens,
+} from "./lib/google-oauth";
+import { randomBytes } from "node:crypto";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 
 type Env = { Variables: { user: AuthedUser } };
 const app = new Hono<Env>().basePath("/api");
@@ -54,6 +66,76 @@ app.get("/auth/me", async (c) => {
 
 // All routes below require auth
 app.use("*", requireAuth);
+
+// ---- GOOGLE OAUTH ----
+const OAUTH_STATE_COOKIE = "bd_google_oauth_state";
+
+app.get("/google/status", async (c) => {
+  const u = c.get("user");
+  const status = await getGoogleStatus(u.id);
+  return c.json({ ...status, configured: isOAuthConfigured() });
+});
+
+app.get("/google/oauth/start", async (c) => {
+  if (!isOAuthConfigured()) {
+    return c.json({ error: "Google OAuth is not configured. Set GOOGLE_OAUTH_CLIENT_ID and GOOGLE_OAUTH_CLIENT_SECRET in your environment." }, 500);
+  }
+  const u = c.get("user");
+  const state = randomBytes(16).toString("base64url");
+  // Bind state to current user via signed cookie (just compare on callback)
+  setCookie(c, OAUTH_STATE_COOKIE, `${u.id}:${state}`, {
+    httpOnly: true,
+    secure: process.env.NODE_ENV === "production",
+    sameSite: "Lax",
+    path: "/api/google",
+    maxAge: 600, // 10 min
+  });
+  const url = buildAuthUrl(c.req.raw, state);
+  return c.json({ url });
+});
+
+app.get("/google/oauth/callback", async (c) => {
+  const u = c.get("user");
+  const code = c.req.query("code");
+  const returnedState = c.req.query("state");
+  const cookieState = getCookie(c, OAUTH_STATE_COOKIE);
+  deleteCookie(c, OAUTH_STATE_COOKIE, { path: "/api/google" });
+
+  if (!code) {
+    const err = c.req.query("error");
+    return c.redirect(`/?google=${err ? "error_" + err : "no_code"}`);
+  }
+  if (!cookieState || !returnedState || !cookieState.endsWith(`:${returnedState}`)) {
+    return c.redirect("/?google=state_mismatch");
+  }
+  if (!cookieState.startsWith(`${u.id}:`)) {
+    return c.redirect("/?google=user_mismatch");
+  }
+
+  try {
+    const tokens = await exchangeCode(c.req.raw, code);
+    const email = tokens.access_token ? await fetchUserEmail(tokens.access_token) : null;
+    await saveTokens(u.id, tokens, email);
+    return c.redirect("/rankings?google=connected");
+  } catch (err) {
+    console.error("OAuth exchange failed:", err);
+    return c.redirect("/rankings?google=exchange_failed");
+  }
+});
+
+app.post("/google/oauth/disconnect", async (c) => {
+  const u = c.get("user");
+  await disconnectGoogle(u.id);
+  return c.json({ ok: true });
+});
+
+app.get("/google/sites", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first" }, 400);
+  const sites = await listSites(auth);
+  return c.json({ sites });
+});
 
 // ---- COMPANIES ----
 const companyInputShape = z.object({
@@ -147,9 +229,12 @@ app.post("/keywords/research", async (c) => {
 });
 
 app.post("/keywords/gsc-opportunities", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account on the Rankings page before running GSC research." }, 400);
   const { siteUrl, days, companyId } = await c.req.json();
   if (!siteUrl) return c.json({ error: "siteUrl required" }, 400);
-  const result = await mineOpportunities({ siteUrl, days: Number(days) || 90 });
+  const result = await mineOpportunities({ auth, siteUrl, days: Number(days) || 90 });
   await db.insert(schema.keywordSessions).values({
     companyId: companyId ?? null,
     mode: "gsc-opportunities",
@@ -215,9 +300,12 @@ app.delete("/keywords/saved/:id", async (c) => {
 
 // ---- RANKINGS ----
 app.post("/rankings/fetch", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
   const { siteUrl, days } = await c.req.json();
   if (!siteUrl) return c.json({ error: "siteUrl required" }, 400);
-  const out = await fetchRankings({ siteUrl, days: Number(days) || 28 });
+  const out = await fetchRankings({ auth, siteUrl, days: Number(days) || 28 });
   return c.json(out);
 });
 
