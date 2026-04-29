@@ -19,8 +19,8 @@
     "baseUrl": ".",
     "paths": {
       "@/*": ["./src/*"],
-      "@server/*": ["./api/lib/*"]
+      "@server/*": ["./server/*"]
     }
   },
-  "include": ["src", "api", "scripts"]
+  "include": ["src", "api", "server", "scripts"]
 }

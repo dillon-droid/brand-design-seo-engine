@@ -1,6 +1,6 @@
 import "dotenv/config";
-import { db, schema } from "../api/lib/db/client";
-import { hashPassword } from "../api/lib/lib/auth";
+import { db, schema } from "../server/db/client";
+import { hashPassword } from "../server/lib/auth";
 import { eq } from "drizzle-orm";
 import readline from "node:readline/promises";
 import { stdin, stdout } from "node:process";

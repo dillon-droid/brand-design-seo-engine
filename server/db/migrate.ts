@@ -9,5 +9,5 @@ if (!url) throw new Error("DATABASE_URL not set");
 const sql = neon(url);
 const db = drizzle(sql);
 
-await migrate(db, { migrationsFolder: "./api/lib/db/migrations" });
+await migrate(db, { migrationsFolder: "./server/db/migrations" });
 console.log("Migrations applied.");
