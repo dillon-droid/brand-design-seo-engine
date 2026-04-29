@@ -1,30 +1,91 @@
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { api } from "@/lib/api";
 
+// Curated to Brand Design Co.'s actual client mix.
+// Most-used categories are listed first; "Used in your companies" is prepended dynamically.
 export const INDUSTRIES = [
-  "Home Services",
-  "Construction",
+  // BD Co. specialties
   "Real Estate",
-  "Legal Services",
-  "Healthcare",
-  "Accounting",
-  "Insurance",
-  "Beauty & Salon",
-  "Fitness & Wellness",
-  "Restaurant & Food",
+  "Real Estate — Cash House Buyer",
+  "Real Estate — Investor / Wholesaler",
+  "Property Management",
+  "Home Services",
+  "Roofing & Building Supply",
+  "Landscaping & Outdoor",
+  "Construction",
+  "Marketing Agency / Digital Marketing",
+  "Business Coaching & Consulting",
+  "Tax & Accounting",
+  "Financial Services",
+  // General industries we sometimes serve
   "E-Commerce",
   "SaaS / Tech",
+  "Healthcare",
+  "Legal Services",
+  "Insurance",
   "Education",
+  "Restaurant & Food",
+  "Fitness & Wellness",
+  "Beauty & Salon",
   "Automotive",
-  "Digital Marketing",
-  "Dog Breeder",
   "Other",
 ];
+
+export function IndustrySelect({
+  value,
+  onValueChange,
+  placeholder = "Select industry…",
+  className,
+}: {
+  value: string;
+  onValueChange: (v: string) => void;
+  placeholder?: string;
+  className?: string;
+}) {
+  const { data: companies = [] } = useQuery<Array<{ industry: string }>>({
+    queryKey: ["companies"],
+    queryFn: () => api.get("/api/companies"),
+  });
+
+  const inUse = Array.from(
+    new Set(
+      companies
+        .map((c) => c.industry)
+        .filter((i): i is string => Boolean(i && i.trim())),
+    ),
+  ).sort();
+
+  return (
+    <Select value={value} onValueChange={onValueChange}>
+      <SelectTrigger className={className}>
+        <SelectValue placeholder={placeholder} />
+      </SelectTrigger>
+      <SelectContent>
+        {inUse.length > 0 ? (
+          <SelectGroup>
+            <SelectLabel>Used in your companies</SelectLabel>
+            {inUse.map((i) => (
+              <SelectItem key={`used-${i}`} value={i}>{i}</SelectItem>
+            ))}
+          </SelectGroup>
+        ) : null}
+        <SelectGroup>
+          <SelectLabel>{inUse.length > 0 ? "All industries" : ""}</SelectLabel>
+          {INDUSTRIES.filter((i) => !inUse.includes(i)).map((i) => (
+            <SelectItem key={i} value={i}>{i}</SelectItem>
+          ))}
+        </SelectGroup>
+      </SelectContent>
+    </Select>
+  );
+}
 
 export type CompanyFormData = {
   id?: string;
@@ -99,12 +160,7 @@ export function CompanyForm({
         </div>
         <div>
           <Label>Industry</Label>
-          <Select value={data.industry} onValueChange={(v) => set("industry", v)}>
-            <SelectTrigger><SelectValue placeholder="Select industry…" /></SelectTrigger>
-            <SelectContent>
-              {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <IndustrySelect value={data.industry} onValueChange={(v) => set("industry", v)} />
         </div>
         <div>
           <Label>Location</Label>

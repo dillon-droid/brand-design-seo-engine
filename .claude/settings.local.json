@@ -53,7 +53,14 @@
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: incrementally test which imports fail\")",
       "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"Rename api/_server/ to api/lib/ — underscore prefix excluded directory from Vercel deployment\")",
       "Bash(rm scripts/build-api.mjs)",
-      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: test if api/lib/ is deployed\")"
+      "Bash(git -c user.email=\"dillon@branddesignco.com\" -c user.name=\"Dillon McCurdy\" commit -m \"diag: test if api/lib/ is deployed\")",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Commit bundled api/index.js so Vercel detects api/ as a functions directory *)",
+      "Bash(python3 -c \"import json,sys; print\\(json.dumps\\(json.load\\(sys.stdin\\)['scripts'], indent=2\\)\\)\")",
+      "Bash(curl -s -i -X POST https://brand-design-seo-engine.vercel.app/api/auth/login -H 'content-type: application/json' -c /tmp/cookies.txt -d '{\"email\":\"dillon@branddesignco.com\",\"password\":\"YTcuxFksfixyaBuj\"}')",
+      "Bash(curl -s \"https://brand-design-seo-engine.vercel.app/api/auth/me\" -b /tmp/cookies.txt)",
+      "Bash(curl -s \"https://brand-design-seo-engine.vercel.app/api/dashboard\" -b /tmp/cookies.txt)",
+      "mcp__Claude_Preview__preview_start",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Curate Industry dropdown to match BD Co. client mix *)"
     ]
   }
 }

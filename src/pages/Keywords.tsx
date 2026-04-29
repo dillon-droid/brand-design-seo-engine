@@ -10,7 +10,7 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
-import { INDUSTRIES } from "@/components/CompanyForm";
+import { IndustrySelect } from "@/components/CompanyForm";
 import { formatNumber } from "@/lib/utils";
 
 type KeywordResult = {
@@ -221,12 +221,7 @@ function SuggestPanel({
         <div className="flex items-end gap-3 mb-4">
           <div className="flex-1">
             <Label>Industry</Label>
-            <Select value={industry} onValueChange={setIndustry}>
-              <SelectTrigger><SelectValue placeholder="Select industry…" /></SelectTrigger>
-              <SelectContent>
-                {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
-              </SelectContent>
-            </Select>
+            <IndustrySelect value={industry} onValueChange={setIndustry} />
           </div>
           <Button onClick={() => run.mutate()} disabled={!industry || run.isPending}>
             {run.isPending ? "Generating…" : "Suggest Keywords"}
@@ -277,14 +272,9 @@ function ResearchPanel({
             {run.isPending ? "Researching…" : "Research Keywords"}
           </Button>
         </div>
-        <div className="mb-4">
+        <div className="mb-4 max-w-sm">
           <Label>Industry (optional)</Label>
-          <Select value={industry} onValueChange={setIndustry}>
-            <SelectTrigger className="max-w-sm"><SelectValue placeholder="Industry…" /></SelectTrigger>
-            <SelectContent>
-              {INDUSTRIES.map((i) => <SelectItem key={i} value={i}>{i}</SelectItem>)}
-            </SelectContent>
-          </Select>
+          <IndustrySelect value={industry} onValueChange={setIndustry} placeholder="Industry…" />
         </div>
         <p className="text-xs text-muted-foreground mb-4">
           Enter a seed keyword and industry to find related opportunities, long-tail variations, and questions people ask.
