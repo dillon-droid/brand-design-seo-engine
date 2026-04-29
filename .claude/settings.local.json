@@ -60,7 +60,9 @@
       "Bash(curl -s \"https://brand-design-seo-engine.vercel.app/api/auth/me\" -b /tmp/cookies.txt)",
       "Bash(curl -s \"https://brand-design-seo-engine.vercel.app/api/dashboard\" -b /tmp/cookies.txt)",
       "mcp__Claude_Preview__preview_start",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Curate Industry dropdown to match BD Co. client mix *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Curate Industry dropdown to match BD Co. client mix *)",
+      "Bash(curl -s --max-time 60 -X POST https://brand-design-seo-engine.vercel.app/api/keywords/suggest -H 'content-type: application/json' -b /tmp/bd-session.txt -d '{\"industry\":\"Roofing & Building Supply\"}')",
+      "Bash(curl -s --max-time 30 -X POST https://brand-design-seo-engine.vercel.app/api/keywords/gsc-opportunities -H 'content-type: application/json' -b /tmp/bd-session.txt -d '{\"siteUrl\":\"branddesignco.com\",\"days\":90}')"
     ]
   }
 }

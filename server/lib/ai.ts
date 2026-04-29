@@ -52,6 +52,39 @@ function parseJson<T>(raw: string): T {
   return JSON.parse(body) as T;
 }
 
+/**
+ * Gemini occasionally returns 503 (UNAVAILABLE) and 429 (RESOURCE_EXHAUSTED) when the
+ * region is overloaded. Retry with jittered exponential backoff before surfacing the error.
+ */
+async function generateWithRetry(
+  args: Parameters<typeof ai.models.generateContent>[0],
+  options: { maxAttempts?: number; fallbackModel?: string } = {},
+) {
+  const { maxAttempts = 4, fallbackModel } = options;
+  let lastErr: unknown;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    try {
+      return await ai.models.generateContent(args);
+    } catch (err) {
+      lastErr = err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const isRetryable =
+        /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|quota)\b/i.test(msg);
+      if (!isRetryable || attempt === maxAttempts) break;
+      const baseDelay = Math.min(1000 * 2 ** (attempt - 1), 8000);
+      const jitter = Math.floor(Math.random() * 500);
+      await new Promise((r) => setTimeout(r, baseDelay + jitter));
+      // On the last retry, optionally drop down to a cheaper/lighter model that's less likely to be capacity-constrained
+      if (fallbackModel && attempt === maxAttempts - 1) {
+        args = { ...args, model: fallbackModel };
+      }
+    }
+  }
+  throw new Error(
+    `AI is temporarily unavailable (${lastErr instanceof Error ? lastErr.message : "unknown"}). Try again in a moment.`,
+  );
+}
+
 export type KeywordResult = {
   keyword: string;
   searchVolume?: number;
@@ -96,7 +129,7 @@ export async function suggestKeywords({
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
 
-  const r = await ai.models.generateContent({
+  const r = await generateWithRetry({
     model: MODELS.fast,
     contents: `Industry: ${industry}. Suggest 25 keywords with a healthy mix of head terms, mid-tail, and long-tail. Bias toward commercial intent for service businesses.`,
     config: {
@@ -122,7 +155,7 @@ export async function researchKeyword({
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
 
-  const r = await ai.models.generateContent({
+  const r = await generateWithRetry({
     model: MODELS.fast,
     contents: `Seed keyword: "${seedKeyword}". Industry: ${industry || "(unspecified)"}. Return 30 results.`,
     config: {
@@ -136,7 +169,7 @@ ${brandContext(company)}`;
 
 export async function estimateDifficultyForQueries(queries: string[]): Promise<Record<string, number>> {
   if (queries.length === 0) return {};
-  const r = await ai.models.generateContent({
+  const r = await generateWithRetry({
     model: MODELS.fast,
     contents: JSON.stringify(queries),
     config: {
@@ -220,15 +253,18 @@ StoryBrand quiz answers from the writer:
 
 Write the article.`.trim();
 
-  const r = await ai.models.generateContent({
-    model: MODELS.smart,
-    contents: userPrompt,
-    config: {
-      systemInstruction: sys,
-      responseMimeType: "application/json",
-      responseSchema: ARTICLE_SCHEMA,
+  const r = await generateWithRetry(
+    {
+      model: MODELS.smart,
+      contents: userPrompt,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: ARTICLE_SCHEMA,
+      },
     },
-  });
+    { fallbackModel: MODELS.fast },
+  );
   const out = parseJson<GeneratedArticle>(r.text ?? "");
   if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;
   if (!out.seoScore) out.seoScore = 75;
