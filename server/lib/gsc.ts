@@ -17,21 +17,53 @@ function dateRange(days: number) {
 async function resolveSiteUrl(auth: OAuth2Client, domain: string): Promise<string> {
   const sc = searchconsole(auth);
   const { data } = await sc.sites.list();
-  const sites = (data.siteEntry || []).map((s) => s.siteUrl).filter(Boolean) as string[];
-  if (sites.length === 0) {
+  const entries = data.siteEntry || [];
+  if (entries.length === 0) {
     throw new Error(
       "Your Google account has no Search Console properties. Make sure you're signed into the right Google account.",
     );
   }
+
+  // siteUnverifiedUser entries appear in sites.list but the API rejects searchanalytics.query
+  // for them. Filter them so we don't hand a broken match back, then look at them separately
+  // to give the user a clear fix path.
   const norm = domain.replace(/^https?:\/\//, "").replace(/^www\./, "").replace(/\/$/, "").toLowerCase();
-  const domainProp = sites.find((s) => s.toLowerCase() === `sc-domain:${norm}`);
-  if (domainProp) return domainProp;
-  const urlProp = sites.find((s) => s.toLowerCase().includes(norm));
-  if (urlProp) return urlProp;
+  const matches = (s: { siteUrl?: string | null }) =>
+    !!s.siteUrl &&
+    (s.siteUrl.toLowerCase() === `sc-domain:${norm}` ||
+      s.siteUrl.toLowerCase().includes(norm));
+
+  const accessible = entries.filter((s) => s.permissionLevel !== "siteUnverifiedUser");
+  const accessibleMatch = accessible.find(matches);
+  if (accessibleMatch?.siteUrl) return accessibleMatch.siteUrl;
+
+  const unverifiedMatch = entries.find(matches);
+  if (unverifiedMatch?.siteUrl) {
+    throw new Error(
+      `You're listed as an unverified user on "${unverifiedMatch.siteUrl}". The property owner needs to remove and re-add ${(await currentEmail(auth)) ?? "your account"} as a Restricted user — or you can verify ownership at https://search.google.com/search-console.`,
+    );
+  }
+
   if (domain.startsWith("sc-domain:") || domain.startsWith("http")) return domain;
+  const available = accessible.map((s) => s.siteUrl).filter(Boolean) as string[];
   throw new Error(
-    `No verified GSC property matches "${domain}". Available: ${sites.slice(0, 5).join(", ")}${sites.length > 5 ? "…" : ""}`,
+    `No GSC property matches "${domain}" on your connected Google account. ${available.length} accessible: ${available.slice(0, 5).join(", ")}${available.length > 5 ? "…" : ""}`,
   );
+}
+
+async function currentEmail(auth: OAuth2Client): Promise<string | null> {
+  try {
+    const tok = (auth.credentials as { access_token?: string }).access_token;
+    if (!tok) return null;
+    const r = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+      headers: { Authorization: `Bearer ${tok}` },
+    });
+    if (!r.ok) return null;
+    const j = (await r.json()) as { email?: string };
+    return j.email ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export type RankingRow = {
