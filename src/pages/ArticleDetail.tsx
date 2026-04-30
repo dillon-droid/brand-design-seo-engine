@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ArticlePerformance } from "@/components/ArticlePerformance";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 
@@ -45,6 +46,7 @@ type Article = {
   schemaJsonLd: string;
   voiceReview: VoiceReview | null;
   seoMeta: SeoMeta;
+  publishedUrl: string | null;
   companyId: string | null;
   createdAt: string;
 };
@@ -150,6 +152,11 @@ export function ArticleDetailPage({ id }: { id: string }) {
           {seo.readTimeMinutes ? <span>· <Clock className="inline w-3 h-3" /> {seo.readTimeMinutes} min</span> : null}
           <span>· Target: {a.targetKeyword}</span>
         </div>
+      </div>
+
+      {/* Performance card */}
+      <div className="mb-4">
+        <ArticlePerformance articleId={a.id} publishedUrl={a.publishedUrl} targetKeyword={a.targetKeyword} />
       </div>
 
       {/* TL;DR — prominent */}

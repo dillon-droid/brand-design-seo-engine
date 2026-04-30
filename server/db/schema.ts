@@ -41,6 +41,7 @@ export const companies = pgTable("companies", {
   sbSuccessVision: text("sb_success_vision").default("").notNull(),
   sbFailureStakes: text("sb_failure_stakes").default("").notNull(),
   sbBrandVoice: text("sb_brand_voice").default("").notNull(),
+  ga4PropertyId: text("ga4_property_id"), // numeric GA4 property ID, e.g. "12345678"
   createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).defaultNow().notNull(),
 });
@@ -96,6 +97,7 @@ export const articles = pgTable(
     quizAnswers: jsonb("quiz_answers").$type<Record<string, string>>().default({}).notNull(),
     schemaJsonLd: text("schema_json_ld").default("").notNull(),
     voiceReview: jsonb("voice_review").$type<unknown>(),
+    publishedUrl: text("published_url"), // user enters this once published — enables performance tracking
     seoMeta: jsonb("seo_meta")
       .$type<{
         tldr?: string;
@@ -113,4 +115,22 @@ export const articles = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ companyIdx: index("a_company_idx").on(t.companyId) }),
+);
+
+// Daily-ish snapshots of article rankings for trend charts.
+// Populated by /api/cron/rankings (Vercel cron) and by manual refresh.
+export const articleRankings = pgTable(
+  "article_rankings",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    articleId: uuid("article_id").notNull().references(() => articles.id, { onDelete: "cascade" }),
+    keyword: text("keyword").notNull(),
+    page: text("page"), // GSC page that matched, if known
+    position: real("position").notNull(),
+    impressions: integer("impressions").default(0).notNull(),
+    clicks: integer("clicks").default(0).notNull(),
+    ctr: real("ctr").default(0).notNull(),
+    fetchedAt: timestamp("fetched_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (t) => ({ articleIdx: index("ar_article_idx").on(t.articleId, t.fetchedAt) }),
 );

@@ -29,6 +29,13 @@
       "when": 1777563481360,
       "tag": "0003_condemned_the_hunter",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777567425526,
+      "tag": "0004_spicy_revanche",
+      "breakpoints": true
     }
   ]
 }

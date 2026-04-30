@@ -12,6 +12,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { CompanyForm, type CompanyFormData } from "@/components/CompanyForm";
 import { GoogleConnect } from "@/components/GoogleConnect";
 import { PageSpeedBadge } from "@/components/PageSpeedBadge";
+import { Ga4Widget } from "@/components/Ga4Widget";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { formatNumber } from "@/lib/utils";
@@ -31,7 +32,7 @@ type RankingResponse = {
 };
 type GoogleStatus = { connected: boolean; configured: boolean };
 
-type Company = CompanyFormData & { id: string; createdAt: string; updatedAt: string };
+type Company = CompanyFormData & { id: string; createdAt: string; updatedAt: string; ga4PropertyId?: string | null };
 type SavedKeyword = {
   id: string;
   keyword: string;
@@ -262,6 +263,18 @@ export function CompanyDetailPage({ id }: { id: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* GA4 widget */}
+      {company.domain && googleStatus?.connected && (
+        <div className="mb-6">
+          <Ga4Widget
+            companyId={id}
+            domain={company.domain}
+            propertyId={company.ga4PropertyId ?? null}
+            googleConnected={!!googleStatus?.connected}
+          />
+        </div>
+      )}
 
       {/* Rankings (auto-fetched if domain set + Google connected) */}
       {company.domain && (

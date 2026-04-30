@@ -18,6 +18,13 @@ import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeyw
 import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
 import { checkPageSpeedBoth } from "./lib/pagespeed";
 import { notifyIndexing } from "./lib/indexing";
+import { fetchPagePerformance, fetchPropertyOverview, findPropertyForDomain, listProperties } from "./lib/ga4";
+import {
+  getArticleRankHistory,
+  getCompanyArticleRankings,
+  runDailySnapshot,
+  snapshotArticle,
+} from "./lib/rank-tracker";
 import {
   buildAuthUrl,
   disconnect as disconnectGoogle,
@@ -64,6 +71,17 @@ app.get("/auth/me", async (c) => {
   const s = await getSession(id);
   if (!s) return c.json({ user: null });
   return c.json({ user: { id: s.user.id, email: s.user.email, name: s.user.name } });
+});
+
+// ---- CRON (auth via CRON_SECRET, NOT user session) ----
+app.get("/cron/rankings", async (c) => {
+  const expected = process.env.CRON_SECRET;
+  const auth = c.req.header("authorization") ?? "";
+  if (!expected || auth !== `Bearer ${expected}`) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  const result = await runDailySnapshot();
+  return c.json(result);
 });
 
 // All routes below require auth
@@ -160,6 +178,7 @@ const companyInputShape = z.object({
   sbSuccessVision: z.string().default(""),
   sbFailureStakes: z.string().default(""),
   sbBrandVoice: z.string().default(""),
+  ga4PropertyId: z.string().nullable().optional(),
 });
 
 app.get("/companies", async (c) => {
@@ -537,6 +556,81 @@ app.post("/indexing/submit", async (c) => {
   const { url, type } = await c.req.json();
   if (!url) return c.json({ error: "url required" }, 400);
   const out = await notifyIndexing({ auth, url, type: type === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED" });
+  return c.json(out);
+});
+
+// ---- ARTICLE PERFORMANCE TRACKING ----
+app.get("/articles/:id/rank-history", async (c) => {
+  const days = Number(c.req.query("days") ?? 90);
+  const rows = await getArticleRankHistory(c.req.param("id"), days);
+  return c.json({ rows });
+});
+
+app.post("/articles/:id/snapshot", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const id = c.req.param("id");
+  const rows = await db.select().from(schema.articles).where(eq(schema.articles.id, id)).limit(1);
+  const article = rows[0];
+  if (!article) return c.json({ error: "Article not found" }, 404);
+  const company = await loadCompany(article.companyId);
+  const result = await snapshotArticle({ auth, article, companyDomain: company?.domain ?? null });
+  return c.json(result);
+});
+
+app.patch("/articles/:id/publish-url", async (c) => {
+  const id = c.req.param("id");
+  const { publishedUrl } = await c.req.json();
+  const [row] = await db
+    .update(schema.articles)
+    .set({ publishedUrl: publishedUrl ?? null })
+    .where(eq(schema.articles.id, id))
+    .returning();
+  return c.json(row);
+});
+
+app.get("/companies/:id/article-rankings", async (c) => {
+  const rows = await getCompanyArticleRankings(c.req.param("id"));
+  return c.json({ rows });
+});
+
+// ---- GA4 ----
+app.get("/ga4/properties", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const properties = await listProperties(auth);
+  return c.json({ properties });
+});
+
+app.post("/ga4/auto-detect", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const { domain } = await c.req.json();
+  if (!domain) return c.json({ error: "domain required" }, 400);
+  const property = await findPropertyForDomain(auth, domain);
+  return c.json({ property });
+});
+
+app.post("/ga4/overview", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const { propertyId, days } = await c.req.json();
+  if (!propertyId) return c.json({ error: "propertyId required" }, 400);
+  const overview = await fetchPropertyOverview({ auth, propertyId, days: Number(days) || 28 });
+  return c.json(overview);
+});
+
+app.post("/ga4/page", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const { propertyId, pagePath, days } = await c.req.json();
+  if (!propertyId || !pagePath) return c.json({ error: "propertyId and pagePath required" }, 400);
+  const out = await fetchPagePerformance({ auth, propertyId, pagePath, days: Number(days) || 28 });
   return c.json(out);
 });
 
