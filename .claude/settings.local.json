@@ -85,7 +85,8 @@
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'AI fallback chains: drop retired 1.5 models, longer backoff on 429 quota errors *)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Major feature batch: schema markup, voice review, PageSpeed, Indexing, DOCX, search *)",
       "Bash(curl -s --max-time 180 -X POST http://localhost:3001/api/articles/generate -H 'content-type: application/json' -b /tmp/local-session.txt -d '{ *)",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Fix article generation null-markdown crash by splitting schema gen into separate call *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Fix article generation null-markdown crash by splitting schema gen into separate call *)",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article supplements: TL;DR, GHL keywords, slug, image prompts, social snippets, OG, internal links *)"
     ]
   }
 }

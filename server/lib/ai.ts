@@ -299,18 +299,29 @@ export async function generateArticle({
 }): Promise<GeneratedArticle> {
   const wordTarget = length === "short" ? 800 : length === "long" ? 2500 : 1500;
 
-  const sys = `You are a senior SEO content writer for Brand Design Co., a marketing agency that uses StoryBrand. Write articles in the client's brand voice that:
-- Open with the reader's specific problem and emotional state
-- Position the brand as the trusted guide
-- Use SEO-optimized heading structure (H1 once, H2/H3 logical hierarchy)
-- Include an FAQ section for featured snippets
-- End with a clear, direct call-to-action
-- Are formatted for both AI search direct-answer engines and Google
-- Use a comparison table or numbered list once, naturally
-- Use natural keyword placement (target keyword in H1, intro, one H2, conclusion; secondary keywords woven naturally — never stuffed)
-- Include internal linking suggestions in [brackets]
+  const sys = `You are a senior SEO content writer for Brand Design Co., a marketing agency that uses StoryBrand. Write articles for both Google AND AI search engines (Perplexity, ChatGPT, Google AI Overviews).
 
-For "html", return semantic HTML for the article body only — no <html>/<body> wrapper. For "title" stay under 60 chars. For "metaDescription" stay 150-160 chars.
+REQUIRED ARTICLE STRUCTURE (in this order):
+1. **H1** with the target keyword
+2. **TL;DR section** — labeled exactly "## TL;DR" (markdown) or <h2>TL;DR</h2> (html). 3–4 sentences max. This is the section AI search engines extract — make it dense, declarative, and answer the reader's core question outright.
+3. **Hook intro** — open with the reader's specific problem and emotional state (StoryBrand). 2–3 paragraphs.
+4. **H2 sections** — each H2 MUST be followed immediately by a 40–60-word direct-answer paragraph (no fluff, no preamble, just the answer to the H2 question). Then expand with details, sub-H3s, examples.
+5. **Use one comparison table or numbered list** somewhere natural.
+6. **FAQ section** — at least 4 question/answer pairs, each Q phrased as a real search query.
+7. **Clear, direct CTA** at the end (use the company's StoryBrand CTA when available).
+
+OTHER REQUIREMENTS:
+- Position the brand as the trusted guide (StoryBrand framework — empathy + authority).
+- Natural keyword placement: target keyword in H1, TL;DR, intro, one H2, and CTA. Secondary keywords woven in — never stuffed.
+- Internal linking: where you'd naturally link to another article on the site, hint with [bracketed anchor text].
+
+OUTPUT FIELDS:
+- "html": semantic HTML for the article body only — no <html>/<body> wrapper.
+- "title": <60 chars, contains target keyword.
+- "metaDescription": 150–160 chars, contains target keyword.
+- "markdown": the same article in markdown.
+- "seoScore": 0–100 self-assessment.
+- "wordCount": integer.
 
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
@@ -353,6 +364,124 @@ Write the article.`.trim();
   if (!out.seoScore) out.seoScore = 75;
   out.schemaJsonLd = ""; // populated separately below by the caller
   return out;
+}
+
+export type SeoMeta = {
+  tldr: string;
+  keywords: string[];
+  slug: string;
+  readTimeMinutes: number;
+  pullQuotes: string[];
+  imagePrompts: Array<{ placement: string; prompt: string; altText: string }>;
+  socialSnippets: { linkedin: string; twitter: string };
+  openGraph: { title: string; description: string; imageAlt: string };
+  internalLinkSuggestions: Array<{ anchorText: string; topicToLinkTo: string }>;
+};
+
+const SEO_META_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    tldr: { type: Type.STRING },
+    keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+    slug: { type: Type.STRING },
+    readTimeMinutes: { type: Type.NUMBER },
+    pullQuotes: { type: Type.ARRAY, items: { type: Type.STRING } },
+    imagePrompts: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          placement: { type: Type.STRING },
+          prompt: { type: Type.STRING },
+          altText: { type: Type.STRING },
+        },
+        propertyOrdering: ["placement", "prompt", "altText"],
+      },
+    },
+    socialSnippets: {
+      type: Type.OBJECT,
+      properties: {
+        linkedin: { type: Type.STRING },
+        twitter: { type: Type.STRING },
+      },
+      propertyOrdering: ["linkedin", "twitter"],
+    },
+    openGraph: {
+      type: Type.OBJECT,
+      properties: {
+        title: { type: Type.STRING },
+        description: { type: Type.STRING },
+        imageAlt: { type: Type.STRING },
+      },
+      propertyOrdering: ["title", "description", "imageAlt"],
+    },
+    internalLinkSuggestions: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          anchorText: { type: Type.STRING },
+          topicToLinkTo: { type: Type.STRING },
+        },
+        propertyOrdering: ["anchorText", "topicToLinkTo"],
+      },
+    },
+  },
+  required: ["tldr", "keywords", "slug", "readTimeMinutes", "pullQuotes", "imagePrompts", "socialSnippets", "openGraph", "internalLinkSuggestions"],
+};
+
+export async function generateSeoMeta({
+  company,
+  article,
+}: {
+  company: Company | null;
+  article: { title: string; metaDescription: string; markdown: string; targetKeyword: string; secondaryKeywords: string[] };
+}): Promise<SeoMeta> {
+  const sys = `You are an SEO + content distribution specialist. For the article below, produce structured supplementary content the writer can paste into a CMS (like GoHighLevel) or social channels.
+
+FIELD GUIDANCE:
+- "tldr": 3–4 sentence dense summary that answers the reader's core question. AI search extracts this; make it stand alone.
+- "keywords": 8–12 keywords/phrases as a comma-ready array. Mix the target keyword, secondary keywords, and natural variations. Pasteable into a CMS "Meta Keywords" field.
+- "slug": SEO-friendly URL slug (lowercase, hyphens, ~60 chars max, no stopwords if avoidable).
+- "readTimeMinutes": realistic estimate based on word count (~200 wpm).
+- "pullQuotes": 2–3 quotable lines lifted verbatim from the article — strong, specific, tweetable.
+- "imagePrompts": 4–5 image briefs. For each: placement (e.g. "Hero image", "After H2 Section 2", "Pull quote backdrop"), prompt (a vivid, ready-to-paste prompt for Midjourney/DALL-E/ChatGPT — describe subject, style, mood, lighting, color palette, NOT just keywords), altText (descriptive alt text for screen readers + SEO).
+- "socialSnippets.linkedin": LinkedIn post version (150–250 words, hook in first line, 3–5 paragraphs, ends with question or CTA, no hashtags).
+- "socialSnippets.twitter": Twitter/X thread (5–7 tweets, numbered, each ≤270 chars, hook tweet first, last tweet has CTA).
+- "openGraph.title": 60-char OG/Twitter card title (slightly more clickbait than meta title is OK).
+- "openGraph.description": 200-char OG description.
+- "openGraph.imageAlt": alt text for the share image.
+- "internalLinkSuggestions": 3–6 entries identifying anchor phrases in the article that should link to other articles on the same site, with topicToLinkTo describing the topic the destination article should cover.
+
+Return JSON only.
+
+CLIENT CONTEXT:
+${brandContext(company)}`;
+
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Article title: ${article.title}\nMeta: ${article.metaDescription}\nTarget keyword: ${article.targetKeyword}\nSecondary keywords: ${article.secondaryKeywords.join(", ") || "(none)"}\n\nArticle markdown:\n${article.markdown}`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: SEO_META_SCHEMA,
+      },
+    },
+    { fallbackChain: FAST_CHAIN },
+  );
+  const out = parseJson<SeoMeta>(r.text ?? "");
+  return {
+    tldr: out.tldr ?? "",
+    keywords: out.keywords ?? [],
+    slug: out.slug ?? "",
+    readTimeMinutes: out.readTimeMinutes ?? 0,
+    pullQuotes: out.pullQuotes ?? [],
+    imagePrompts: out.imagePrompts ?? [],
+    socialSnippets: out.socialSnippets ?? { linkedin: "", twitter: "" },
+    openGraph: out.openGraph ?? { title: "", description: "", imageAlt: "" },
+    internalLinkSuggestions: out.internalLinkSuggestions ?? [],
+  };
 }
 
 /**

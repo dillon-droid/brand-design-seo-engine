@@ -96,6 +96,20 @@ export const articles = pgTable(
     quizAnswers: jsonb("quiz_answers").$type<Record<string, string>>().default({}).notNull(),
     schemaJsonLd: text("schema_json_ld").default("").notNull(),
     voiceReview: jsonb("voice_review").$type<unknown>(),
+    seoMeta: jsonb("seo_meta")
+      .$type<{
+        tldr?: string;
+        keywords?: string[]; // for GHL meta keywords box, comma-sep ready
+        slug?: string;
+        readTimeMinutes?: number;
+        pullQuotes?: string[];
+        imagePrompts?: Array<{ placement: string; prompt: string; altText: string }>;
+        socialSnippets?: { linkedin?: string; twitter?: string };
+        openGraph?: { title?: string; description?: string; imageAlt?: string };
+        internalLinkSuggestions?: Array<{ anchorText: string; topicToLinkTo: string }>;
+      }>()
+      .default({})
+      .notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ companyIdx: index("a_company_idx").on(t.companyId) }),

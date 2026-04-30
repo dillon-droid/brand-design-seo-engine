@@ -14,7 +14,7 @@ import {
   verifyPassword,
   type AuthedUser,
 } from "./lib/auth";
-import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords, reviewArticleVoice, generateSchemaForArticle } from "./lib/ai";
+import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords, reviewArticleVoice, generateSchemaForArticle, generateSeoMeta } from "./lib/ai";
 import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
 import { checkPageSpeedBoth } from "./lib/pagespeed";
 import { notifyIndexing } from "./lib/indexing";
@@ -430,26 +430,59 @@ app.post("/articles/generate", async (c) => {
     })
     .returning();
 
-  // Generate schema markup as a follow-up so a schema-gen failure doesn't block
-  // the article creation. Best effort: save the result, log+ignore on failure.
-  generateSchemaForArticle({
+  // Fire-and-forget the supplementary content (schema + SEO meta) so a
+  // failure on these doesn't block the article being saved.
+  Promise.allSettled([
+    generateSchemaForArticle({
+      company,
+      article: {
+        title: article.title,
+        metaDescription: article.metaDescription,
+        markdown: article.markdown,
+        html: article.html,
+        targetKeyword: data.targetKeyword,
+      },
+    }).then((schemaJsonLd) =>
+      schemaJsonLd
+        ? db.update(schema.articles).set({ schemaJsonLd }).where(eq(schema.articles.id, row.id))
+        : null,
+    ),
+    generateSeoMeta({
+      company,
+      article: {
+        title: article.title,
+        metaDescription: article.metaDescription,
+        markdown: article.markdown,
+        targetKeyword: data.targetKeyword,
+        secondaryKeywords: data.secondaryKeywords,
+      },
+    }).then((seoMeta) =>
+      db.update(schema.articles).set({ seoMeta }).where(eq(schema.articles.id, row.id)),
+    ),
+  ]).catch((err) => console.error("article supplementary content failed:", err));
+
+  return c.json(row);
+});
+
+// Backfill / regenerate seoMeta on demand
+app.post("/articles/:id/seo-meta", async (c) => {
+  const id = c.req.param("id");
+  const rows = await db.select().from(schema.articles).where(eq(schema.articles.id, id)).limit(1);
+  const article = rows[0];
+  if (!article) return c.json({ error: "Article not found" }, 404);
+  const company = await loadCompany(article.companyId);
+  const seoMeta = await generateSeoMeta({
     company,
     article: {
       title: article.title,
       metaDescription: article.metaDescription,
       markdown: article.markdown,
-      html: article.html,
-      targetKeyword: data.targetKeyword,
+      targetKeyword: article.targetKeyword,
+      secondaryKeywords: article.secondaryKeywords ?? [],
     },
-  })
-    .then(async (schemaJsonLd) => {
-      if (schemaJsonLd) {
-        await db.update(schema.articles).set({ schemaJsonLd }).where(eq(schema.articles.id, row.id));
-      }
-    })
-    .catch((err) => console.error("schema generation failed:", err));
-
-  return c.json(row);
+  });
+  await db.update(schema.articles).set({ seoMeta }).where(eq(schema.articles.id, id));
+  return c.json(seoMeta);
 });
 
 // Generate / regenerate schema for an existing article on demand

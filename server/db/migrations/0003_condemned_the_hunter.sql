@@ -1,0 +1,1 @@
+ALTER TABLE "articles" ADD COLUMN "seo_meta" jsonb DEFAULT '{}'::jsonb NOT NULL;
