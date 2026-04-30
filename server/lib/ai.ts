@@ -263,9 +263,13 @@ export type GeneratedArticle = {
   html: string;
   seoScore: number;
   wordCount: number;
-  schemaJsonLd: string;
+  schemaJsonLd: string; // populated by a separate generateSchemaForArticle call after article is generated
 };
 
+// Article generation schema: schemaJsonLd is intentionally NOT included here.
+// Including it caused the model to occasionally truncate or omit `markdown`
+// because escaping a JSON-LD string inside a structured JSON response is
+// hard for the model to get right. Schema is now generated in a follow-up call.
 const ARTICLE_SCHEMA = {
   type: Type.OBJECT,
   properties: {
@@ -275,9 +279,9 @@ const ARTICLE_SCHEMA = {
     html: { type: Type.STRING },
     seoScore: { type: Type.NUMBER },
     wordCount: { type: Type.NUMBER },
-    schemaJsonLd: { type: Type.STRING },
   },
-  propertyOrdering: ["title", "metaDescription", "markdown", "html", "seoScore", "wordCount", "schemaJsonLd"],
+  required: ["title", "metaDescription", "markdown", "html"],
+  propertyOrdering: ["title", "metaDescription", "markdown", "html", "seoScore", "wordCount"],
 };
 
 export async function generateArticle({
@@ -307,8 +311,6 @@ export async function generateArticle({
 - Include internal linking suggestions in [brackets]
 
 For "html", return semantic HTML for the article body only — no <html>/<body> wrapper. For "title" stay under 60 chars. For "metaDescription" stay 150-160 chars.
-
-For "schemaJsonLd", return a stringified JSON-LD payload that includes the appropriate schema.org types for this article: an "Article" object (with headline, description, articleBody summary, datePublished as today's ISO date, author as the company name) PLUS an "FAQPage" object IF the article includes a Q&A/FAQ section (one Question/Answer per FAQ entry). Wrap the two in an "@graph" array. Use proper escaping. The string itself should be valid JSON that can be embedded in a <script type="application/ld+json"> tag.
 
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
@@ -342,10 +344,62 @@ Write the article.`.trim();
     { fallbackChain: SMART_CHAIN },
   );
   const out = parseJson<GeneratedArticle>(r.text ?? "");
-  if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;
+  if (!out.markdown || !out.html || !out.title) {
+    throw new Error(
+      `AI returned an incomplete article (missing ${!out.markdown ? "markdown" : !out.html ? "html" : "title"}). Try regenerating.`,
+    );
+  }
+  if (!out.wordCount) out.wordCount = out.markdown.split(/\s+/).filter(Boolean).length;
   if (!out.seoScore) out.seoScore = 75;
-  if (!out.schemaJsonLd) out.schemaJsonLd = "";
+  out.schemaJsonLd = ""; // populated separately below by the caller
   return out;
+}
+
+/**
+ * Second-pass call: produce JSON-LD schema markup for a saved article.
+ * Done as a separate request because nesting a stringified JSON inside a
+ * structured-output JSON response was unreliable — the model would
+ * occasionally truncate the article body to fit.
+ */
+export async function generateSchemaForArticle({
+  company,
+  article,
+}: {
+  company: Company | null;
+  article: { title: string; metaDescription: string; markdown: string; html: string; targetKeyword: string };
+}): Promise<string> {
+  const sys = `You generate schema.org JSON-LD for an SEO article.
+
+Return a single JSON object with shape:
+{ "jsonLd": "<stringified JSON-LD>" }
+
+The "jsonLd" string MUST be valid JSON that can be pasted into a <script type="application/ld+json"> tag. Use a top-level "@graph" array containing:
+1. An "Article" object (headline, description, articleBody as a brief summary, datePublished as today's ISO date, author = the company name).
+2. An "FAQPage" object IF (and only if) the article has a Q&A/FAQ section. Map each Q&A to a Question/Answer node.
+
+Return JSON only — no markdown, no commentary.
+
+CLIENT CONTEXT:
+${brandContext(company)}`;
+
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Article title: ${article.title}\nTarget keyword: ${article.targetKeyword}\nMeta: ${article.metaDescription}\n\nArticle markdown:\n${article.markdown}`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: { jsonLd: { type: Type.STRING } },
+          required: ["jsonLd"],
+        },
+      },
+    },
+    { fallbackChain: FAST_CHAIN },
+  );
+  const out = parseJson<{ jsonLd: string }>(r.text ?? "");
+  return out.jsonLd ?? "";
 }
 
 export type VoiceReview = {

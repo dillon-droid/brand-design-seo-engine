@@ -54,6 +54,15 @@ export function ArticleDetailPage({ id }: { id: string }) {
     onError: (e: Error) => toast({ title: "Review failed", description: e.message, variant: "destructive" }),
   });
 
+  const regenSchema = useMutation({
+    mutationFn: () => api.post<{ schemaJsonLd: string }>(`/api/articles/${id}/schema`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["article", id] });
+      toast({ title: "Schema markup generated" });
+    },
+    onError: (e: Error) => toast({ title: "Schema generation failed", description: e.message, variant: "destructive" }),
+  });
+
   const submitToGoogle = useMutation({
     mutationFn: (body: { url: string }) => api.post("/api/indexing/submit", body),
     onSuccess: () => toast({ title: "Submitted to Google", description: "Indexing API notified — re-crawl typically within 1–2 hours." }),
@@ -226,7 +235,15 @@ export function ArticleDetailPage({ id }: { id: string }) {
                   </a>
                 </>
               ) : (
-                <p className="text-sm text-muted-foreground">No schema markup. Regenerate this article to get JSON-LD.</p>
+                <div className="text-center py-8">
+                  <p className="text-sm text-muted-foreground mb-3">
+                    No schema markup yet. We can generate JSON-LD (Article + FAQPage) for this article.
+                  </p>
+                  <Button onClick={() => regenSchema.mutate()} disabled={regenSchema.isPending}>
+                    <Sparkles className="w-4 h-4 mr-1.5" />
+                    {regenSchema.isPending ? "Generating…" : "Generate Schema Markup"}
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>

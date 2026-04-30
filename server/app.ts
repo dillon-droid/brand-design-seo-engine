@@ -14,7 +14,7 @@ import {
   verifyPassword,
   type AuthedUser,
 } from "./lib/auth";
-import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords, reviewArticleVoice } from "./lib/ai";
+import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords, reviewArticleVoice, generateSchemaForArticle } from "./lib/ai";
 import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
 import { checkPageSpeedBoth } from "./lib/pagespeed";
 import { notifyIndexing } from "./lib/indexing";
@@ -417,7 +417,7 @@ app.post("/articles/generate", async (c) => {
       html: article.html,
       seoScore: article.seoScore,
       wordCount: article.wordCount,
-      schemaJsonLd: article.schemaJsonLd ?? "",
+      schemaJsonLd: "",
       quizAnswers: {
         whoIsTheReader: data.whoIsTheReader,
         whatProblem: data.whatProblem,
@@ -429,11 +429,49 @@ app.post("/articles/generate", async (c) => {
       },
     })
     .returning();
+
+  // Generate schema markup as a follow-up so a schema-gen failure doesn't block
+  // the article creation. Best effort: save the result, log+ignore on failure.
+  generateSchemaForArticle({
+    company,
+    article: {
+      title: article.title,
+      metaDescription: article.metaDescription,
+      markdown: article.markdown,
+      html: article.html,
+      targetKeyword: data.targetKeyword,
+    },
+  })
+    .then(async (schemaJsonLd) => {
+      if (schemaJsonLd) {
+        await db.update(schema.articles).set({ schemaJsonLd }).where(eq(schema.articles.id, row.id));
+      }
+    })
+    .catch((err) => console.error("schema generation failed:", err));
+
   return c.json(row);
 });
 
-// ---- ARTICLE: store generated schemaJsonLd ----
-// (handled in /articles/generate by saving schemaJsonLd from AI output)
+// Generate / regenerate schema for an existing article on demand
+app.post("/articles/:id/schema", async (c) => {
+  const id = c.req.param("id");
+  const rows = await db.select().from(schema.articles).where(eq(schema.articles.id, id)).limit(1);
+  const article = rows[0];
+  if (!article) return c.json({ error: "Article not found" }, 404);
+  const company = await loadCompany(article.companyId);
+  const schemaJsonLd = await generateSchemaForArticle({
+    company,
+    article: {
+      title: article.title,
+      metaDescription: article.metaDescription,
+      markdown: article.markdown,
+      html: article.html,
+      targetKeyword: article.targetKeyword,
+    },
+  });
+  await db.update(schema.articles).set({ schemaJsonLd }).where(eq(schema.articles.id, id));
+  return c.json({ schemaJsonLd });
+});
 
 // ---- ARTICLE VOICE REVIEW ----
 app.post("/articles/:id/review", async (c) => {
