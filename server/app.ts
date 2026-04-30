@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { eq, desc, sql } from "drizzle-orm";
+import { eq, desc, sql, and } from "drizzle-orm";
 import { z } from "zod";
 import { db, schema } from "./db/client";
 import {
@@ -25,6 +25,7 @@ import {
   runDailySnapshot,
   snapshotArticle,
 } from "./lib/rank-tracker";
+import { processNextJob } from "./lib/article-queue";
 import {
   buildAuthUrl,
   disconnect as disconnectGoogle,
@@ -81,6 +82,19 @@ app.get("/cron/rankings", async (c) => {
     return c.json({ error: "Unauthorized" }, 401);
   }
   const result = await runDailySnapshot();
+  return c.json(result);
+});
+
+// Process the article-generation queue. Runs every few minutes via Vercel cron.
+// Each invocation processes up to N jobs (sequential to stay under the
+// serverless 60s timeout — one full generation is ~60-90s by itself).
+app.get("/cron/process-articles", async (c) => {
+  const expected = process.env.CRON_SECRET;
+  const auth = c.req.header("authorization") ?? "";
+  if (!expected || auth !== `Bearer ${expected}`) {
+    return c.json({ error: "Unauthorized" }, 401);
+  }
+  const result = await processNextJob();
   return c.json(result);
 });
 
@@ -557,6 +571,81 @@ app.post("/indexing/submit", async (c) => {
   if (!url) return c.json({ error: "url required" }, 400);
   const out = await notifyIndexing({ auth, url, type: type === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED" });
   return c.json(out);
+});
+
+// ---- ARTICLE BULK GENERATION QUEUE ----
+app.post("/articles/bulk-generate", async (c) => {
+  const u = c.get("user");
+  const body = await c.req.json();
+  const parsed = z
+    .object({
+      jobs: z
+        .array(
+          z.object({
+            companyId: z.string().nullable().optional(),
+            targetKeyword: z.string().min(1),
+            secondaryKeywords: z.array(z.string()).default([]),
+            length: z.enum(["short", "medium", "long"]).default("medium"),
+          }),
+        )
+        .min(1)
+        .max(50),
+    })
+    .safeParse(body);
+  if (!parsed.success) return c.json({ error: parsed.error.issues[0]?.message ?? "Invalid" }, 400);
+
+  const inserted = await db
+    .insert(schema.articleJobs)
+    .values(
+      parsed.data.jobs.map((j) => ({
+        companyId: j.companyId ?? null,
+        targetKeyword: j.targetKeyword,
+        secondaryKeywords: j.secondaryKeywords,
+        length: j.length,
+        requestedBy: u.id,
+      })),
+    )
+    .returning();
+
+  // Kick off processing immediately (best-effort) so the first job starts now
+  // instead of waiting for the next cron tick. Fire-and-forget.
+  processNextJob().catch((err) => console.error("immediate processNextJob failed:", err));
+
+  return c.json({ jobs: inserted });
+});
+
+app.get("/article-jobs", async (c) => {
+  const companyId = c.req.query("companyId");
+  const rows = companyId
+    ? await db
+        .select()
+        .from(schema.articleJobs)
+        .where(eq(schema.articleJobs.companyId, companyId))
+        .orderBy(desc(schema.articleJobs.createdAt))
+        .limit(100)
+    : await db
+        .select()
+        .from(schema.articleJobs)
+        .orderBy(desc(schema.articleJobs.createdAt))
+        .limit(100);
+  return c.json({ jobs: rows });
+});
+
+app.delete("/article-jobs/:id", async (c) => {
+  const id = c.req.param("id");
+  const [row] = await db
+    .update(schema.articleJobs)
+    .set({ status: "cancelled", completedAt: new Date() })
+    .where(and(eq(schema.articleJobs.id, id), eq(schema.articleJobs.status, "pending")))
+    .returning();
+  if (!row) return c.json({ error: "Cannot cancel — job is not pending" }, 400);
+  return c.json(row);
+});
+
+// Allow processing-the-next-job from a logged-in user (poke button when cron is slow)
+app.post("/article-jobs/process-next", async (c) => {
+  const result = await processNextJob();
+  return c.json(result);
 });
 
 // ---- ARTICLE PERFORMANCE TRACKING ----

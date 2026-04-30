@@ -13,6 +13,7 @@ import { CompanyForm, type CompanyFormData } from "@/components/CompanyForm";
 import { GoogleConnect } from "@/components/GoogleConnect";
 import { PageSpeedBadge } from "@/components/PageSpeedBadge";
 import { Ga4Widget } from "@/components/Ga4Widget";
+import { JobsPanel } from "@/components/JobsPanel";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { formatNumber } from "@/lib/utils";
@@ -69,6 +70,27 @@ export function CompanyDetailPage({ id }: { id: string }) {
   const [editing, setEditing] = useState(false);
   const [showBrandScript, setShowBrandScript] = useState(false);
   const [nextResults, setNextResults] = useState<NextKeyword[] | null>(null);
+  const [selectedKwIds, setSelectedKwIds] = useState<Set<string>>(new Set());
+
+  const bulkGenerate = useMutation({
+    mutationFn: (jobs: Array<{ targetKeyword: string; companyId: string; length: "short" | "medium" | "long" }>) =>
+      api.post<{ jobs: Array<{ id: string }> }>("/api/articles/bulk-generate", { jobs }),
+    onSuccess: (r) => {
+      toast({ title: `${r.jobs.length} articles queued`, description: "They'll generate one after another in the background." });
+      setSelectedKwIds(new Set());
+      qc.invalidateQueries({ queryKey: ["article-jobs"] });
+    },
+    onError: (e: Error) => toast({ title: "Bulk generation failed", description: e.message, variant: "destructive" }),
+  });
+
+  const toggleSelectKw = (id: string) => {
+    setSelectedKwIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const { data: company, isLoading } = useQuery<Company>({
     queryKey: ["company", id],
@@ -380,6 +402,9 @@ export function CompanyDetailPage({ id }: { id: string }) {
         </Card>
       )}
 
+      {/* Article generation queue (only renders when jobs exist) */}
+      <JobsPanel />
+
       {/* Three-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Articles */}
@@ -436,6 +461,8 @@ export function CompanyDetailPage({ id }: { id: string }) {
                     onToggleTarget={() => toggleTargeted.mutate(k)}
                     onArticle={() => goToArticle(k.keyword)}
                     existingArticleId={articleByKeyword.get(k.keyword.toLowerCase())}
+                    selected={selectedKwIds.has(k.id)}
+                    onToggleSelect={() => toggleSelectKw(k.id)}
                   />
                 ))}
               </div>
@@ -456,7 +483,15 @@ export function CompanyDetailPage({ id }: { id: string }) {
             ) : (
               <div className="divide-y divide-border">
                 {notTargeted.map((k) => (
-                  <KeywordRow key={k.id} k={k} onToggleTarget={() => toggleTargeted.mutate(k)} onArticle={() => goToArticle(k.keyword)} />
+                  <KeywordRow
+                    key={k.id}
+                    k={k}
+                    onToggleTarget={() => toggleTargeted.mutate(k)}
+                    onArticle={() => goToArticle(k.keyword)}
+                    existingArticleId={articleByKeyword.get(k.keyword.toLowerCase())}
+                    selected={selectedKwIds.has(k.id)}
+                    onToggleSelect={() => toggleSelectKw(k.id)}
+                  />
                 ))}
               </div>
             )}
@@ -505,6 +540,38 @@ export function CompanyDetailPage({ id }: { id: string }) {
         </Card>
       </div>
 
+      {/* Sticky bulk-generate bar */}
+      {selectedKwIds.size > 0 && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50">
+          <Card className="border-[hsl(36_95%_57%/0.4)] shadow-lg glow-orange">
+            <CardContent className="p-3 flex items-center gap-3">
+              <span className="text-sm font-bold">{selectedKwIds.size} keyword{selectedKwIds.size === 1 ? "" : "s"} selected</span>
+              <Button
+                size="sm"
+                onClick={() => {
+                  const selected = savedKeywords.filter((k) => selectedKwIds.has(k.id));
+                  if (!confirm(`Queue ${selected.length} articles for "${company?.name}"? Each takes ~90s and they generate one after another.`)) return;
+                  bulkGenerate.mutate(
+                    selected.map((k) => ({
+                      targetKeyword: k.keyword,
+                      companyId: id,
+                      length: "medium" as const,
+                    })),
+                  );
+                }}
+                disabled={bulkGenerate.isPending}
+              >
+                <Sparkles className="w-3.5 h-3.5 mr-1.5" />
+                {bulkGenerate.isPending ? "Queuing…" : `Queue ${selectedKwIds.size} articles`}
+              </Button>
+              <Button size="sm" variant="ghost" onClick={() => setSelectedKwIds(new Set())}>
+                Cancel
+              </Button>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent>
           <DialogHeader>
@@ -551,14 +618,28 @@ function KeywordRow({
   onToggleTarget,
   onArticle,
   existingArticleId,
+  selected,
+  onToggleSelect,
 }: {
   k: SavedKeyword;
   onToggleTarget: () => void;
   onArticle: () => void;
   existingArticleId?: string;
+  selected?: boolean;
+  onToggleSelect?: () => void;
 }) {
+  const selectable = !existingArticleId && !!onToggleSelect;
   return (
     <div className="flex items-center gap-3 py-2.5">
+      {selectable && (
+        <input
+          type="checkbox"
+          checked={!!selected}
+          onChange={onToggleSelect}
+          className="shrink-0 cursor-pointer accent-[hsl(36_95%_57%)]"
+          aria-label="Select for bulk generation"
+        />
+      )}
       <button type="button" onClick={onToggleTarget} className="shrink-0" aria-label={k.targeted ? "Mark not targeted" : "Mark targeted"}>
         <Target className={`w-4 h-4 ${k.targeted ? "text-[hsl(36_95%_57%)]" : "text-[hsl(0_0%_30%)]"}`} />
       </button>

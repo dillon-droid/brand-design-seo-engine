@@ -8,6 +8,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ArticleForm, type ArticleFormPayload } from "@/components/ArticleForm";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { JobsPanel } from "@/components/JobsPanel";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -98,6 +99,8 @@ export function ArticlesPage() {
           <Plus className="w-4 h-4 mr-1.5" /> Generate Article
         </Button>
       </div>
+
+      <JobsPanel />
 
       {articles.length > 0 && (
         <Card className="mb-4">

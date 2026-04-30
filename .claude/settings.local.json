@@ -87,7 +87,10 @@
       "Bash(curl -s --max-time 180 -X POST http://localhost:3001/api/articles/generate -H 'content-type: application/json' -b /tmp/local-session.txt -d '{ *)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Fix article generation null-markdown crash by splitting schema gen into separate call *)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article supplements: TL;DR, GHL keywords, slug, image prompts, social snippets, OG, internal links *)",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article performance tracking + GA4 integration *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article performance tracking + GA4 integration *)",
+      "WebFetch(domain:orchard.com)",
+      "WebFetch(domain:webuycolorado.com)",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Bulk article generation: queue, cron processor, multi-select UI, jobs panel *)"
     ]
   }
 }

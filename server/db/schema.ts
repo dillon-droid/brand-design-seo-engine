@@ -117,6 +117,31 @@ export const articles = pgTable(
   (t) => ({ companyIdx: index("a_company_idx").on(t.companyId) }),
 );
 
+// Queue table for bulk article generation. POST /articles/bulk-generate
+// inserts pending rows; the cron processor picks one off at a time and
+// generates the article, marking complete + linking to articleId.
+export const articleJobs = pgTable(
+  "article_jobs",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+    companyId: uuid("company_id").references(() => companies.id, { onDelete: "cascade" }),
+    targetKeyword: text("target_keyword").notNull(),
+    secondaryKeywords: jsonb("secondary_keywords").$type<string[]>().default([]).notNull(),
+    length: text("length").default("medium").notNull(), // short | medium | long
+    status: text("status").default("pending").notNull(), // pending | processing | done | failed | cancelled
+    articleId: uuid("article_id").references(() => articles.id, { onDelete: "set null" }),
+    errorMessage: text("error_message"),
+    requestedBy: uuid("requested_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    completedAt: timestamp("completed_at", { withTimezone: true }),
+  },
+  (t) => ({
+    statusIdx: index("aj_status_idx").on(t.status, t.createdAt),
+    companyIdx: index("aj_company_idx").on(t.companyId),
+  }),
+);
+
 // Daily-ish snapshots of article rankings for trend charts.
 // Populated by /api/cron/rankings (Vercel cron) and by manual refresh.
 export const articleRankings = pgTable(
