@@ -78,7 +78,11 @@
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article generation simplification + Company detail page *)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Robustness + UX: AI retry chain, auto-suggested secondary keywords, inline company rankings *)",
       "Bash(curl -s --max-time 60 -X POST \"http://localhost:3001/api/keywords/next\" -H \"content-type: application/json\" -b /tmp/local-session.txt -d '{\"companyId\":\"ad45a5d2-2ce6-4e82-9b7f-5bc6700dcda9\"}')",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Make all AI calls \\(not just article gen\\) walk a multi-model fallback chain *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Make all AI calls \\(not just article gen\\) walk a multi-model fallback chain *)",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"%{http_code} /\\\\n\" --max-time 10 \"https://seo.branddesignco.com/\")",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"%{http_code} /companies\\\\n\" --max-time 10 \"https://seo.branddesignco.com/companies\")",
+      "Bash(/usr/bin/curl -s -o /dev/null -w \"%{http_code} /api/auth/me\\\\n\" --max-time 10 \"https://seo.branddesignco.com/api/auth/me\")",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'AI fallback chains: drop retired 1.5 models, longer backoff on 429 quota errors *)"
     ]
   }
 }

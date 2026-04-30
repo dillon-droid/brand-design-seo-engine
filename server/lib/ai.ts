@@ -18,8 +18,10 @@ export const MODELS = {
 
 // Fallback chains for when the primary is overloaded.
 // generateWithRetry walks these across attempts.
-const FAST_CHAIN = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"];
-const SMART_CHAIN = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-pro"];
+// Verified live as of probe: gemini-2.0-flash, 2.0-flash-lite, 2.5-flash,
+// 2.5-flash-lite, 2.5-pro. (1.5 series retired.)
+const FAST_CHAIN = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-2.0-flash-lite"];
+const SMART_CHAIN = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-2.5-flash-lite"];
 
 type Company = typeof schema.companies.$inferSelect;
 
@@ -93,9 +95,13 @@ async function generateWithRetry(
       const isRetryable =
         /\b(503|429|500|UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|overloaded|high demand|quota|deadline)\b/i.test(msg);
       if (!isRetryable || attempt === maxAttempts) break;
-      // Jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 16s
-      const baseDelay = Math.min(1000 * 2 ** (attempt - 1), 16000);
-      const jitter = Math.floor(Math.random() * 800);
+      // 429 = per-minute quota — need to wait at least until the next minute window
+      // 503/500/UNAVAILABLE = try again sooner
+      const isQuota = /\b(429|RESOURCE_EXHAUSTED|quota)\b/i.test(msg);
+      const baseDelay = isQuota
+        ? Math.min(15_000 + 1000 * 2 ** (attempt - 1), 30_000)
+        : Math.min(1000 * 2 ** (attempt - 1), 16_000);
+      const jitter = Math.floor(Math.random() * 1000);
       await new Promise((r) => setTimeout(r, baseDelay + jitter));
     }
   }
