@@ -54,30 +54,40 @@ function parseJson<T>(raw: string): T {
 
 /**
  * Gemini occasionally returns 503 (UNAVAILABLE) and 429 (RESOURCE_EXHAUSTED) when the
- * region is overloaded. Retry with jittered exponential backoff before surfacing the error.
+ * region is overloaded. Retry with jittered exponential backoff. For high-stakes calls
+ * (article generation), also walk down a chain of fallback models so we degrade
+ * gracefully rather than failing.
  */
 async function generateWithRetry(
   args: Parameters<typeof ai.models.generateContent>[0],
-  options: { maxAttempts?: number; fallbackModel?: string } = {},
+  options: { maxAttempts?: number; fallbackChain?: string[] } = {},
 ) {
-  const { maxAttempts = 4, fallbackModel } = options;
+  const { maxAttempts = 6, fallbackChain = [] } = options;
+  // Build sequence of models we'll try across the retries.
+  // First N attempts use the primary model; later attempts walk fallbackChain.
+  const initialModel = args.model;
   let lastErr: unknown;
+
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    // Pick model for this attempt: first 2 attempts use primary, then walk fallback chain
+    let modelForAttempt = initialModel;
+    if (attempt > 2 && fallbackChain.length > 0) {
+      const idx = Math.min(attempt - 3, fallbackChain.length - 1);
+      modelForAttempt = fallbackChain[idx];
+    }
+
     try {
-      return await ai.models.generateContent(args);
+      return await ai.models.generateContent({ ...args, model: modelForAttempt });
     } catch (err) {
       lastErr = err;
       const msg = err instanceof Error ? err.message : String(err);
       const isRetryable =
-        /\b(503|429|UNAVAILABLE|RESOURCE_EXHAUSTED|overloaded|high demand|quota)\b/i.test(msg);
+        /\b(503|429|500|UNAVAILABLE|RESOURCE_EXHAUSTED|INTERNAL|overloaded|high demand|quota|deadline)\b/i.test(msg);
       if (!isRetryable || attempt === maxAttempts) break;
-      const baseDelay = Math.min(1000 * 2 ** (attempt - 1), 8000);
-      const jitter = Math.floor(Math.random() * 500);
+      // Jittered exponential backoff: 1s, 2s, 4s, 8s, 16s, 16s
+      const baseDelay = Math.min(1000 * 2 ** (attempt - 1), 16000);
+      const jitter = Math.floor(Math.random() * 800);
       await new Promise((r) => setTimeout(r, baseDelay + jitter));
-      // On the last retry, optionally drop down to a cheaper/lighter model that's less likely to be capacity-constrained
-      if (fallbackModel && attempt === maxAttempts - 1) {
-        args = { ...args, model: fallbackModel };
-      }
     }
   }
   throw new Error(
@@ -184,6 +194,41 @@ export async function estimateDifficultyForQueries(queries: string[]): Promise<R
   }
 }
 
+export async function suggestSecondaryKeywords({
+  targetKeyword,
+  company,
+}: {
+  targetKeyword: string;
+  company: Company | null;
+}): Promise<string[]> {
+  const sys = `You suggest 6-8 secondary SEO keywords/phrases that should be naturally woven into an article targeting a primary keyword. They should be:
+- Semantically related variations
+- Long-tail expansions (e.g. "best", "near me", "vs", "how to", "cost")
+- Common questions
+- Adjacent commercial intent terms
+
+Return JSON: {"keywords": [string]}.
+
+CLIENT CONTEXT:
+${brandContext(company)}`;
+
+  const r = await generateWithRetry({
+    model: MODELS.fast,
+    contents: `Primary target keyword: "${targetKeyword}". Suggest 6-8 secondary keywords.`,
+    config: {
+      systemInstruction: sys,
+      responseMimeType: "application/json",
+      responseSchema: {
+        type: Type.OBJECT,
+        properties: {
+          keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+        },
+      },
+    },
+  });
+  return (parseJson<{ keywords: string[] }>(r.text ?? "").keywords || []).slice(0, 8);
+}
+
 export type GeneratedArticle = {
   title: string;
   metaDescription: string;
@@ -263,7 +308,7 @@ Write the article.`.trim();
         responseSchema: ARTICLE_SCHEMA,
       },
     },
-    { fallbackModel: MODELS.fast },
+    { fallbackChain: [MODELS.fast, "gemini-2.0-flash", MODELS.fast] },
   );
   const out = parseJson<GeneratedArticle>(r.text ?? "");
   if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;

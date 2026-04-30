@@ -1,6 +1,6 @@
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight, Sparkles } from "lucide-react";
+import { useEffect, useState } from "react";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight, Plus, RefreshCw, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -47,8 +47,41 @@ export function ArticleForm({
 }) {
   const [companyId, setCompanyId] = useState(initialCompanyId ?? "");
   const [targetKeyword, setTargetKeyword] = useState(initialTargetKeyword ?? "");
-  const [secondaryRaw, setSecondaryRaw] = useState("");
   const [length, setLength] = useState<"short" | "medium" | "long">("medium");
+
+  // Secondary keywords: AI-suggested chips + user-added customs
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [selectedSecondaries, setSelectedSecondaries] = useState<Set<string>>(new Set());
+  const [customRaw, setCustomRaw] = useState("");
+
+  const fetchSecondaries = useMutation({
+    mutationFn: (body: { targetKeyword: string; companyId?: string }) =>
+      api.post<{ results: string[] }>("/api/keywords/secondaries", body),
+    onSuccess: (r) => {
+      setSuggestions(r.results);
+      // Auto-select all suggestions on first load
+      setSelectedSecondaries(new Set(r.results));
+    },
+  });
+
+  // Auto-fetch suggestions when target keyword + company stabilize
+  useEffect(() => {
+    if (!targetKeyword || targetKeyword.trim().length < 3) return;
+    const t = setTimeout(() => {
+      fetchSecondaries.mutate({ targetKeyword: targetKeyword.trim(), companyId: companyId || undefined });
+    }, 500);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetKeyword, companyId]);
+
+  const toggleSecondary = (kw: string) => {
+    setSelectedSecondaries((prev) => {
+      const next = new Set(prev);
+      if (next.has(kw)) next.delete(kw);
+      else next.add(kw);
+      return next;
+    });
+  };
 
   const [advanced, setAdvanced] = useState(false);
   const [whoIsTheReader, setWhoIsTheReader] = useState("");
@@ -67,13 +100,16 @@ export function ArticleForm({
   const hasBrandScript = !!company && (company.brandScript || company.sbHero);
 
   const handleGenerate = () => {
+    const customs = customRaw
+      .split(/[,\n]/)
+      .map((s) => s.trim())
+      .filter(Boolean);
+    const secondaryKeywords = [...Array.from(selectedSecondaries), ...customs];
+
     onSubmit({
       companyId: companyId || undefined,
       targetKeyword,
-      secondaryKeywords: secondaryRaw
-        .split(/[,\n]/)
-        .map((s) => s.trim())
-        .filter(Boolean),
+      secondaryKeywords,
       length,
       whoIsTheReader,
       whatProblem,
@@ -118,12 +154,50 @@ export function ArticleForm({
       </div>
 
       <div>
-        <Label>Secondary Keywords <span className="opacity-50">(optional)</span></Label>
+        <div className="flex items-center justify-between mb-1.5">
+          <Label className="mb-0">Secondary Keywords</Label>
+          <button
+            type="button"
+            onClick={() => fetchSecondaries.mutate({ targetKeyword: targetKeyword.trim(), companyId: companyId || undefined })}
+            disabled={!targetKeyword || fetchSecondaries.isPending}
+            className="text-[11px] text-[hsl(36_95%_57%)] hover:underline flex items-center gap-1 disabled:opacity-50"
+          >
+            <RefreshCw className={`w-3 h-3 ${fetchSecondaries.isPending ? "animate-spin" : ""}`} />
+            {fetchSecondaries.isPending ? "Generating…" : suggestions.length > 0 ? "Regenerate" : "Suggest"}
+          </button>
+        </div>
+        {!targetKeyword ? (
+          <p className="text-[11px] text-[hsl(0_0%_50%)] py-2">Enter a target keyword above and we'll suggest secondaries automatically.</p>
+        ) : suggestions.length === 0 && !fetchSecondaries.isPending ? (
+          <p className="text-[11px] text-[hsl(0_0%_50%)] py-2">Click "Suggest" to generate secondary keywords.</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {suggestions.map((kw) => {
+              const on = selectedSecondaries.has(kw);
+              return (
+                <button
+                  key={kw}
+                  type="button"
+                  onClick={() => toggleSecondary(kw)}
+                  className={`text-xs px-2.5 py-1 rounded-full border transition-colors ${
+                    on
+                      ? "bg-[hsl(36_95%_57%/0.15)] text-[hsl(36_95%_57%)] border-[hsl(36_95%_57%/0.4)]"
+                      : "bg-secondary text-[hsl(0_0%_55%)] border-border hover:text-foreground"
+                  }`}
+                >
+                  {on ? <X className="inline w-3 h-3 mr-0.5 -mt-0.5" /> : <Plus className="inline w-3 h-3 mr-0.5 -mt-0.5" />}
+                  {kw}
+                </button>
+              );
+            })}
+          </div>
+        )}
         <Textarea
           rows={2}
-          value={secondaryRaw}
-          onChange={(e) => setSecondaryRaw(e.target.value)}
-          placeholder="Other terms to weave in naturally — comma or newline separated."
+          value={customRaw}
+          onChange={(e) => setCustomRaw(e.target.value)}
+          placeholder="Add custom secondary keywords (optional, comma or newline separated)…"
+          className="mt-2 text-sm"
         />
       </div>
 

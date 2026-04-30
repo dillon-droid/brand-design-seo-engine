@@ -14,7 +14,7 @@ import {
   verifyPassword,
   type AuthedUser,
 } from "./lib/auth";
-import { suggestKeywords, researchKeyword, generateArticle } from "./lib/ai";
+import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords } from "./lib/ai";
 import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
 import {
   buildAuthUrl,
@@ -225,6 +225,14 @@ app.post("/keywords/research", async (c) => {
     industry: industry || "",
     results,
   });
+  return c.json({ results });
+});
+
+app.post("/keywords/secondaries", async (c) => {
+  const { targetKeyword, companyId } = await c.req.json();
+  if (!targetKeyword) return c.json({ error: "targetKeyword required" }, 400);
+  const company = await loadCompany(companyId);
+  const results = await suggestSecondaryKeywords({ targetKeyword, company });
   return c.json({ results });
 });
 

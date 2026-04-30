@@ -75,7 +75,8 @@
       "Bash(python3 -c ' *)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'GSC: surface friendly error for unverified-user properties *)",
       "Bash(rm -f src/components/ArticleQuiz.tsx)",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article generation simplification + Company detail page *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article generation simplification + Company detail page *)",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Robustness + UX: AI retry chain, auto-suggested secondary keywords, inline company rankings *)"
     ]
   }
 }

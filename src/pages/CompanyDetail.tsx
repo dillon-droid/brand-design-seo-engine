@@ -1,18 +1,34 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft, ArrowRight, Bookmark, Building2, ChevronDown, ChevronRight,
-  FileText, Pencil, Sparkles, Target,
+  ArrowLeft, ArrowRight, Bookmark, Building2, ChartColumn, ChevronDown, ChevronRight,
+  ExternalLink, FileText, Pencil, RefreshCw, Sparkles, Target,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CompanyForm, type CompanyFormData } from "@/components/CompanyForm";
+import { GoogleConnect } from "@/components/GoogleConnect";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { formatNumber } from "@/lib/utils";
+
+type RankingRow = {
+  query: string;
+  page: string;
+  position: number;
+  impressions: number;
+  clicks: number;
+  ctr: number;
+};
+type RankingResponse = {
+  siteUrl: string;
+  rows: RankingRow[];
+  totals: { clicks: number; impressions: number; avgPosition: number; page1Count: number };
+};
+type GoogleStatus = { connected: boolean; configured: boolean };
 
 type Company = CompanyFormData & { id: string; createdAt: string; updatedAt: string };
 type SavedKeyword = {
@@ -106,6 +122,30 @@ export function CompanyDetailPage({ id }: { id: string }) {
     },
   });
 
+  const { data: googleStatus } = useQuery<GoogleStatus>({
+    queryKey: ["google-status"],
+    queryFn: () => api.get("/api/google/status"),
+  });
+
+  const [rankings, setRankings] = useState<RankingResponse | null>(null);
+  const [rankingDays, setRankingDays] = useState<number>(28);
+
+  const fetchRankings = useMutation({
+    mutationFn: (body: { siteUrl: string; days: number }) =>
+      api.post<RankingResponse>("/api/rankings/fetch", body),
+    onSuccess: (r) => setRankings(r),
+    onError: (e: Error) => toast({ title: "Couldn't fetch rankings", description: e.message, variant: "destructive" }),
+  });
+
+  // Auto-fetch rankings when company + Google connected
+  const company_domain = company?.domain;
+  useEffect(() => {
+    if (!company_domain || !googleStatus?.connected) return;
+    if (rankings) return; // only initial fetch — user can refresh manually
+    fetchRankings.mutate({ siteUrl: company_domain, days: rankingDays });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company_domain, googleStatus?.connected]);
+
   if (isLoading) return <div className="p-10 text-muted-foreground">Loading…</div>;
   if (!company) return <div className="p-10 text-muted-foreground">Company not found.</div>;
 
@@ -195,6 +235,107 @@ export function CompanyDetailPage({ id }: { id: string }) {
           )}
         </CardContent>
       </Card>
+
+      {/* Rankings (auto-fetched if domain set + Google connected) */}
+      {company.domain && (
+        <Card className="mb-6">
+          <CardContent className="p-5">
+            <div className="flex items-center justify-between mb-3 gap-3">
+              <div className="flex items-center gap-2">
+                <ChartColumn className="w-4 h-4 text-[hsl(36_95%_57%)]" />
+                <h2 className="text-sm font-bold uppercase tracking-wide">
+                  Live Rankings ({company.domain})
+                </h2>
+              </div>
+              <div className="flex items-center gap-2">
+                <select
+                  value={rankingDays}
+                  onChange={(e) => {
+                    const d = Number(e.target.value);
+                    setRankingDays(d);
+                    if (company.domain) fetchRankings.mutate({ siteUrl: company.domain, days: d });
+                  }}
+                  className="text-xs bg-input border border-border rounded px-2 py-1 text-foreground"
+                >
+                  <option value={7}>7 days</option>
+                  <option value={28}>28 days</option>
+                  <option value={90}>90 days</option>
+                </select>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => fetchRankings.mutate({ siteUrl: company.domain, days: rankingDays })}
+                  disabled={fetchRankings.isPending || !googleStatus?.connected}
+                  title="Refresh"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${fetchRankings.isPending ? "animate-spin" : ""}`} />
+                </Button>
+              </div>
+            </div>
+
+            {!googleStatus?.connected ? (
+              <GoogleConnect />
+            ) : fetchRankings.isPending && !rankings ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">Loading rankings…</div>
+            ) : !rankings ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">
+                Click refresh to fetch rankings for {company.domain}.
+              </div>
+            ) : rankings.rows.length === 0 ? (
+              <div className="text-sm text-muted-foreground py-6 text-center">
+                No GSC data for {company.domain} in the last {rankingDays} days. Make sure you have access to its Search Console property.
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-4">
+                  <MiniStat label="Clicks" value={formatNumber(rankings.totals.clicks)} />
+                  <MiniStat label="Impressions" value={formatNumber(rankings.totals.impressions)} />
+                  <MiniStat label="Avg Position" value={rankings.totals.avgPosition.toFixed(1)} />
+                  <MiniStat label="Page 1 KWs" value={String(rankings.totals.page1Count)} />
+                </div>
+                <div className="divide-y divide-border max-h-96 overflow-y-auto">
+                  {rankings.rows.slice(0, 30).map((r, i) => (
+                    <div key={i} className="flex items-center gap-3 py-2 text-xs">
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-foreground truncate">{r.query}</div>
+                        <a
+                          href={r.page}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="text-[10px] text-[hsl(0_0%_45%)] hover:text-[hsl(36_95%_57%)] flex items-center gap-1 truncate"
+                        >
+                          {r.page} <ExternalLink className="w-2.5 h-2.5" />
+                        </a>
+                      </div>
+                      <div className="hidden md:flex items-center gap-3 text-[hsl(0_0%_55%)] shrink-0">
+                        <span>Impr {formatNumber(r.impressions)}</span>
+                        <span>Clk {r.clicks}</span>
+                        <span>CTR {(r.ctr * 100).toFixed(1)}%</span>
+                      </div>
+                      <Badge variant={r.position <= 10 ? "success" : r.position <= 30 ? "default" : "secondary"}>
+                        #{r.position.toFixed(1)}
+                      </Badge>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => goToArticle(r.query)}
+                        title="Generate article for this query"
+                      >
+                        <FileText className="w-3.5 h-3.5" />
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+                {rankings.rows.length > 30 && (
+                  <p className="text-[11px] text-[hsl(0_0%_45%)] text-center mt-3">
+                    Showing top 30 of {rankings.rows.length} queries
+                  </p>
+                )}
+              </>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       {/* Three-column layout */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -327,6 +468,15 @@ export function CompanyDetailPage({ id }: { id: string }) {
           />
         </DialogContent>
       </Dialog>
+    </div>
+  );
+}
+
+function MiniStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="bg-secondary border border-border rounded p-2.5">
+      <div className="text-[9px] font-bold uppercase tracking-wide text-[hsl(0_0%_50%)]">{label}</div>
+      <div className="text-base font-extrabold font-display text-foreground">{value}</div>
     </div>
   );
 }
