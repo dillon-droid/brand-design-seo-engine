@@ -8,10 +8,18 @@ if (!apiKey) {
 
 const ai = new GoogleGenAI({ apiKey: apiKey ?? "" });
 
+// Lead with gemini-2.0-flash for speed/stability (older = more spare capacity).
+// 2.5 family is hyped & frequently 503s during peak hours. Quality is equivalent
+// for structured-output keyword/short-text tasks.
 export const MODELS = {
-  fast: "gemini-2.5-flash",
+  fast: "gemini-2.0-flash",
   smart: "gemini-2.5-pro",
 } as const;
+
+// Fallback chains for when the primary is overloaded.
+// generateWithRetry walks these across attempts.
+const FAST_CHAIN = ["gemini-2.5-flash", "gemini-2.5-flash-lite", "gemini-1.5-flash"];
+const SMART_CHAIN = ["gemini-2.0-flash", "gemini-2.5-flash", "gemini-1.5-pro"];
 
 type Company = typeof schema.companies.$inferSelect;
 
@@ -69,10 +77,11 @@ async function generateWithRetry(
   let lastErr: unknown;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
-    // Pick model for this attempt: first 2 attempts use primary, then walk fallback chain
+    // Pick model for this attempt: first attempt uses primary, then walk fallback chain
+    // (jump models early — if the primary is overloaded, retrying the same one rarely helps)
     let modelForAttempt = initialModel;
-    if (attempt > 2 && fallbackChain.length > 0) {
-      const idx = Math.min(attempt - 3, fallbackChain.length - 1);
+    if (attempt > 1 && fallbackChain.length > 0) {
+      const idx = Math.min(attempt - 2, fallbackChain.length - 1);
       modelForAttempt = fallbackChain[idx];
     }
 
@@ -139,15 +148,18 @@ export async function suggestKeywords({
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
 
-  const r = await generateWithRetry({
-    model: MODELS.fast,
-    contents: `Industry: ${industry}. Suggest 25 keywords with a healthy mix of head terms, mid-tail, and long-tail. Bias toward commercial intent for service businesses.`,
-    config: {
-      systemInstruction: sys,
-      responseMimeType: "application/json",
-      responseSchema: KEYWORD_LIST_SCHEMA,
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Industry: ${industry}. Suggest 25 keywords with a healthy mix of head terms, mid-tail, and long-tail. Bias toward commercial intent for service businesses.`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: KEYWORD_LIST_SCHEMA,
+      },
     },
-  });
+    { fallbackChain: FAST_CHAIN },
+  );
   return parseJson<{ results: KeywordResult[] }>(r.text ?? "").results || [];
 }
 
@@ -165,28 +177,34 @@ export async function researchKeyword({
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
 
-  const r = await generateWithRetry({
-    model: MODELS.fast,
-    contents: `Seed keyword: "${seedKeyword}". Industry: ${industry || "(unspecified)"}. Return 30 results.`,
-    config: {
-      systemInstruction: sys,
-      responseMimeType: "application/json",
-      responseSchema: KEYWORD_LIST_SCHEMA,
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Seed keyword: "${seedKeyword}". Industry: ${industry || "(unspecified)"}. Return 30 results.`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: KEYWORD_LIST_SCHEMA,
+      },
     },
-  });
+    { fallbackChain: FAST_CHAIN },
+  );
   return parseJson<{ results: KeywordResult[] }>(r.text ?? "").results || [];
 }
 
 export async function estimateDifficultyForQueries(queries: string[]): Promise<Record<string, number>> {
   if (queries.length === 0) return {};
-  const r = await generateWithRetry({
-    model: MODELS.fast,
-    contents: JSON.stringify(queries),
-    config: {
-      systemInstruction: `Estimate SEO keyword difficulty (0-100) for each query. Return JSON: {"<query>": <number>, ...}`,
-      responseMimeType: "application/json",
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: JSON.stringify(queries),
+      config: {
+        systemInstruction: `Estimate SEO keyword difficulty (0-100) for each query. Return JSON: {"<query>": <number>, ...}`,
+        responseMimeType: "application/json",
+      },
     },
-  });
+    { fallbackChain: FAST_CHAIN },
+  );
   try {
     return parseJson<Record<string, number>>(r.text ?? "");
   } catch {
@@ -212,20 +230,23 @@ Return JSON: {"keywords": [string]}.
 CLIENT CONTEXT:
 ${brandContext(company)}`;
 
-  const r = await generateWithRetry({
-    model: MODELS.fast,
-    contents: `Primary target keyword: "${targetKeyword}". Suggest 6-8 secondary keywords.`,
-    config: {
-      systemInstruction: sys,
-      responseMimeType: "application/json",
-      responseSchema: {
-        type: Type.OBJECT,
-        properties: {
-          keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Primary target keyword: "${targetKeyword}". Suggest 6-8 secondary keywords.`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            keywords: { type: Type.ARRAY, items: { type: Type.STRING } },
+          },
         },
       },
     },
-  });
+    { fallbackChain: FAST_CHAIN },
+  );
   return (parseJson<{ keywords: string[] }>(r.text ?? "").keywords || []).slice(0, 8);
 }
 
@@ -308,7 +329,7 @@ Write the article.`.trim();
         responseSchema: ARTICLE_SCHEMA,
       },
     },
-    { fallbackChain: [MODELS.fast, "gemini-2.0-flash", MODELS.fast] },
+    { fallbackChain: SMART_CHAIN },
   );
   const out = parseJson<GeneratedArticle>(r.text ?? "");
   if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;

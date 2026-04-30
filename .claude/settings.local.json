@@ -76,7 +76,9 @@
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'GSC: surface friendly error for unverified-user properties *)",
       "Bash(rm -f src/components/ArticleQuiz.tsx)",
       "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article generation simplification + Company detail page *)",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Robustness + UX: AI retry chain, auto-suggested secondary keywords, inline company rankings *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Robustness + UX: AI retry chain, auto-suggested secondary keywords, inline company rankings *)",
+      "Bash(curl -s --max-time 60 -X POST \"http://localhost:3001/api/keywords/next\" -H \"content-type: application/json\" -b /tmp/local-session.txt -d '{\"companyId\":\"ad45a5d2-2ce6-4e82-9b7f-5bc6700dcda9\"}')",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Make all AI calls \\(not just article gen\\) walk a multi-model fallback chain *)"
     ]
   }
 }
