@@ -73,7 +73,9 @@
       "Bash(curl -s --max-time 10 'https://seo.branddesignco.com/api/google/status?bust=__TRACKED_VAR____TRACKED_VAR__' -b /tmp/seo-session.txt)",
       "Bash(curl -s \"https://seo.branddesignco.com/api/google/sites\" -b /tmp/seo-session.txt)",
       "Bash(python3 -c ' *)",
-      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'GSC: surface friendly error for unverified-user properties *)"
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'GSC: surface friendly error for unverified-user properties *)",
+      "Bash(rm -f src/components/ArticleQuiz.tsx)",
+      "Bash(git -c user.email=dillon@branddesignco.com -c 'user.name=Dillon McCurdy' commit -m 'Article generation simplification + Company detail page *)"
     ]
   }
 }

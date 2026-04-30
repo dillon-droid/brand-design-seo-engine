@@ -6,6 +6,7 @@ import { api } from "@/lib/api";
 
 import { DashboardPage } from "@/pages/Dashboard";
 import { CompaniesPage } from "@/pages/Companies";
+import { CompanyDetailPage } from "@/pages/CompanyDetail";
 import { KeywordsPage } from "@/pages/Keywords";
 import { RankingsPage } from "@/pages/Rankings";
 import { ArticlesPage } from "@/pages/Articles";
@@ -53,6 +54,7 @@ export function App() {
         <Switch>
           <Route path="/" component={DashboardPage} />
           <Route path="/companies" component={CompaniesPage} />
+          <Route path="/companies/:id">{(params) => <CompanyDetailPage id={params.id} />}</Route>
           <Route path="/keywords" component={KeywordsPage} />
           <Route path="/rankings" component={RankingsPage} />
           <Route path="/articles" component={ArticlesPage} />

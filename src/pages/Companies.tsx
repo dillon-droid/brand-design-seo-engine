@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -77,19 +78,21 @@ export function CompaniesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {companies.map((c) => (
-            <Card key={c.id} className="hover:border-[hsl(36_95%_57%/0.3)] transition-colors">
+            <Card key={c.id} className="hover:border-[hsl(36_95%_57%/0.3)] transition-colors group">
               <CardContent className="p-5">
-                <div className="flex items-start gap-3 mb-3">
-                  <div className="w-10 h-10 rounded-lg bg-[hsl(36_95%_57%/0.12)] flex items-center justify-center shrink-0">
-                    <Building2 className="w-5 h-5 text-[hsl(36_95%_57%)]" />
+                <Link href={`/companies/${c.id}`} className="block cursor-pointer">
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-10 h-10 rounded-lg bg-[hsl(36_95%_57%/0.12)] flex items-center justify-center shrink-0">
+                      <Building2 className="w-5 h-5 text-[hsl(36_95%_57%)]" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="text-sm font-bold text-foreground truncate group-hover:text-[hsl(36_95%_57%)]">{c.name}</div>
+                      <div className="text-[11px] text-[hsl(0_0%_50%)] mt-0.5">{c.industry || "—"}</div>
+                    </div>
                   </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-sm font-bold text-foreground truncate">{c.name}</div>
-                    <div className="text-[11px] text-[hsl(0_0%_50%)] mt-0.5">{c.industry || "—"}</div>
-                  </div>
-                </div>
-                {c.domain ? <div className="text-[11px] text-[hsl(0_0%_45%)] truncate mb-2">{c.domain}</div> : null}
-                {c.location ? <div className="text-[11px] text-[hsl(0_0%_45%)] mb-3">{c.location}</div> : null}
+                  {c.domain ? <div className="text-[11px] text-[hsl(0_0%_45%)] truncate mb-2">{c.domain}</div> : null}
+                  {c.location ? <div className="text-[11px] text-[hsl(0_0%_45%)] mb-3">{c.location}</div> : null}
+                </Link>
                 <div className="flex items-center gap-2 mt-3 pt-3 border-t border-border">
                   <Button size="sm" variant="outline" onClick={() => setEditing(c)}>
                     <Pencil className="w-3 h-3 mr-1" /> Edit

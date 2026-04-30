@@ -228,6 +228,34 @@ app.post("/keywords/research", async (c) => {
   return c.json({ results });
 });
 
+app.post("/keywords/next", async (c) => {
+  // AI recommendation: given a company and what's already saved/targeted,
+  // suggest the next keywords to chase.
+  const { companyId } = await c.req.json();
+  if (!companyId) return c.json({ error: "companyId required" }, 400);
+  const company = await loadCompany(companyId);
+  if (!company) return c.json({ error: "Company not found" }, 404);
+
+  const saved = await db
+    .select()
+    .from(schema.savedKeywords)
+    .where(eq(schema.savedKeywords.companyId, companyId));
+  const targeted = saved.filter((k) => k.targeted).map((k) => k.keyword);
+  const allSaved = saved.map((k) => k.keyword);
+
+  // Reuse the keyword research helper but bias the prompt with what's already done.
+  // The simplest path: call suggestKeywords with industry, then filter out ones already saved.
+  const results = await suggestKeywords({ industry: company.industry, company });
+  const fresh = results.filter((r) => !allSaved.includes(r.keyword));
+  await db.insert(schema.keywordSessions).values({
+    companyId,
+    mode: "suggest",
+    industry: company.industry,
+    results: { input: { targeted, allSaved }, results: fresh.slice(0, 15) },
+  });
+  return c.json({ results: fresh.slice(0, 15), targetedCount: targeted.length, savedCount: saved.length });
+});
+
 app.post("/keywords/gsc-opportunities", async (c) => {
   const u = c.get("user");
   const auth = await getUserClient(u.id);
@@ -311,7 +339,14 @@ app.post("/rankings/fetch", async (c) => {
 
 // ---- ARTICLES ----
 app.get("/articles", async (c) => {
-  const rows = await db.select().from(schema.articles).orderBy(desc(schema.articles.createdAt));
+  const companyId = c.req.query("companyId");
+  const rows = companyId
+    ? await db
+        .select()
+        .from(schema.articles)
+        .where(eq(schema.articles.companyId, companyId))
+        .orderBy(desc(schema.articles.createdAt))
+    : await db.select().from(schema.articles).orderBy(desc(schema.articles.createdAt));
   return c.json(rows);
 });
 

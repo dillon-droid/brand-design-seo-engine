@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { useLocation } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Bookmark, ChartColumn, ExternalLink, Lightbulb, Search, Sparkles, Target, TrendingUp } from "lucide-react";
+import { Bookmark, ChartColumn, ExternalLink, FileText, Lightbulb, Search, Sparkles, Target, TrendingUp } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -61,6 +62,7 @@ const bucketVariant: Record<GscBucket, "default" | "warning" | "purple" | "succe
 
 export function KeywordsPage() {
   const qc = useQueryClient();
+  const [, navigate] = useLocation();
 
   const { data: companies = [] } = useQuery<Company[]>({
     queryKey: ["companies"],
@@ -69,6 +71,12 @@ export function KeywordsPage() {
 
   const [companyId, setCompanyId] = useState<string>("");
   const [filter, setFilter] = useState("");
+
+  const goToArticle = (keyword: string, cid?: string) => {
+    const params = new URLSearchParams({ keyword });
+    if (cid) params.set("companyId", cid);
+    navigate(`/articles?${params.toString()}`);
+  };
 
   const { data: saved = [] } = useQuery<SavedKeyword[]>({
     queryKey: ["saved-keywords", companyId],
@@ -126,11 +134,11 @@ export function KeywordsPage() {
         </TabsList>
 
         <TabsContent value="suggest">
-          <SuggestPanel companyId={companyId} onSave={saveKeyword.mutate} />
+          <SuggestPanel companyId={companyId} onSave={saveKeyword.mutate} onArticle={(kw) => goToArticle(kw, companyId || undefined)} />
         </TabsContent>
 
         <TabsContent value="research">
-          <ResearchPanel companyId={companyId} onSave={saveKeyword.mutate} />
+          <ResearchPanel companyId={companyId} onSave={saveKeyword.mutate} onArticle={(kw) => goToArticle(kw, companyId || undefined)} />
         </TabsContent>
 
         <TabsContent value="gsc">
@@ -144,6 +152,7 @@ export function KeywordsPage() {
                 meta: { rationale: `${bucketLabel[o.bucket]} — ${o.reason}` },
               })
             }
+            onArticle={(kw) => goToArticle(kw, companyId || undefined)}
           />
         </TabsContent>
 
@@ -166,10 +175,14 @@ export function KeywordsPage() {
                 <div className="divide-y divide-border">
                   {filteredSaved.map((k) => (
                     <div key={k.id} className="flex items-center gap-4 py-3">
-                      <Target
-                        className={`w-4 h-4 cursor-pointer ${k.targeted ? "text-[hsl(36_95%_57%)]" : "text-[hsl(0_0%_30%)]"}`}
+                      <button
+                        type="button"
                         onClick={() => toggleTargeted.mutate(k)}
-                      />
+                        title={k.targeted ? "Targeted" : "Mark as targeted"}
+                        className="shrink-0"
+                      >
+                        <Target className={`w-4 h-4 ${k.targeted ? "text-[hsl(36_95%_57%)]" : "text-[hsl(0_0%_30%)]"}`} />
+                      </button>
                       <div className="flex-1 min-w-0">
                         <div className="text-sm font-semibold text-foreground truncate">{k.keyword}</div>
                         {k.rationale ? (
@@ -177,6 +190,13 @@ export function KeywordsPage() {
                         ) : null}
                       </div>
                       <KeywordMeta k={k} />
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        onClick={() => goToArticle(k.keyword, k.companyId ?? companyId ?? undefined)}
+                      >
+                        <FileText className="w-3 h-3 mr-1" /> Article
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -202,9 +222,11 @@ function KeywordMeta({ k }: { k: KeywordResult }) {
 function SuggestPanel({
   companyId,
   onSave,
+  onArticle,
 }: {
   companyId: string;
   onSave: (b: { keyword: string; companyId?: string; meta?: Partial<KeywordResult> }) => void;
+  onArticle: (keyword: string) => void;
 }) {
   const [industry, setIndustry] = useState("");
   const [results, setResults] = useState<KeywordResult[]>([]);
@@ -233,7 +255,11 @@ function SuggestPanel({
           Enter an industry to get keyword suggestions. Add a company name and location for more targeted results.
         </p>
 
-        <ResultList results={results} onSave={(r) => onSave({ keyword: r.keyword, companyId: companyId || undefined, meta: r })} />
+        <ResultList
+          results={results}
+          onSave={(r) => onSave({ keyword: r.keyword, companyId: companyId || undefined, meta: r })}
+          onArticle={onArticle}
+        />
       </CardContent>
     </Card>
   );
@@ -242,9 +268,11 @@ function SuggestPanel({
 function ResearchPanel({
   companyId,
   onSave,
+  onArticle,
 }: {
   companyId: string;
   onSave: (b: { keyword: string; companyId?: string; meta?: Partial<KeywordResult> }) => void;
+  onArticle: (keyword: string) => void;
 }) {
   const [seed, setSeed] = useState("");
   const [industry, setIndustry] = useState("");
@@ -280,7 +308,11 @@ function ResearchPanel({
         <p className="text-xs text-muted-foreground mb-4">
           Enter a seed keyword and industry to find related opportunities, long-tail variations, and questions people ask.
         </p>
-        <ResultList results={results} onSave={(r) => onSave({ keyword: r.keyword, companyId: companyId || undefined, meta: r })} />
+        <ResultList
+          results={results}
+          onSave={(r) => onSave({ keyword: r.keyword, companyId: companyId || undefined, meta: r })}
+          onArticle={onArticle}
+        />
       </CardContent>
     </Card>
   );
@@ -290,10 +322,12 @@ function GscOpportunityPanel({
   companies,
   companyId,
   onSave,
+  onArticle,
 }: {
   companies: Company[];
   companyId: string;
   onSave: (o: GscOpportunity) => void;
+  onArticle: (keyword: string) => void;
 }) {
   const company = companies.find((c) => c.id === companyId);
   const [siteUrl, setSiteUrl] = useState(company?.domain || "");
@@ -379,8 +413,11 @@ function GscOpportunityPanel({
                           <span>Clicks {o.clicks}</span>
                           <span>CTR {(o.ctr * 100).toFixed(1)}%</span>
                         </div>
-                        <Button size="sm" variant="outline" onClick={() => onSave(o)}>
-                          Save
+                        <Button size="sm" variant="ghost" onClick={() => onSave(o)} title="Save keyword">
+                          <Bookmark className="w-3.5 h-3.5" />
+                        </Button>
+                        <Button size="sm" variant="outline" onClick={() => onArticle(o.query)}>
+                          <FileText className="w-3 h-3 mr-1" /> Article
                         </Button>
                       </div>
                     ))}
@@ -400,9 +437,11 @@ function GscOpportunityPanel({
 function ResultList({
   results,
   onSave,
+  onArticle,
 }: {
   results: KeywordResult[];
   onSave: (r: KeywordResult) => void;
+  onArticle: (keyword: string) => void;
 }) {
   if (results.length === 0) {
     return <div className="text-sm text-muted-foreground text-center py-8">Start researching to see results.</div>;
@@ -416,8 +455,11 @@ function ResultList({
             {r.rationale ? <div className="text-[11px] text-[hsl(0_0%_50%)] mt-0.5">{r.rationale}</div> : null}
           </div>
           <KeywordMeta k={r} />
-          <Button size="sm" variant="outline" onClick={() => onSave(r)}>
-            <Bookmark className="w-3 h-3 mr-1" />Save
+          <Button size="sm" variant="ghost" onClick={() => onSave(r)} title="Save keyword">
+            <Bookmark className="w-3.5 h-3.5" />
+          </Button>
+          <Button size="sm" variant="outline" onClick={() => onArticle(r.keyword)}>
+            <FileText className="w-3 h-3 mr-1" /> Article
           </Button>
         </div>
       ))}

@@ -1,11 +1,11 @@
-import { useState } from "react";
-import { Link } from "wouter";
+import { useEffect, useState } from "react";
+import { Link, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowRight, FileText, Plus } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { ArticleQuiz, type QuizAnswers } from "@/components/ArticleQuiz";
+import { ArticleForm, type ArticleFormPayload } from "@/components/ArticleForm";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -23,7 +23,23 @@ type Article = {
 
 export function ArticlesPage() {
   const qc = useQueryClient();
-  const [openQuiz, setOpenQuiz] = useState(false);
+  const search = useSearch();
+  const [openForm, setOpenForm] = useState(false);
+  const [prefill, setPrefill] = useState<{ targetKeyword?: string; companyId?: string }>({});
+
+  // When navigated to /articles?keyword=X&companyId=Y, auto-open the dialog with values pre-filled.
+  useEffect(() => {
+    const params = new URLSearchParams(search);
+    const kw = params.get("keyword");
+    const cid = params.get("companyId");
+    if (kw || cid) {
+      setPrefill({ targetKeyword: kw ?? undefined, companyId: cid ?? undefined });
+      setOpenForm(true);
+      // Clean URL after consuming params so refresh doesn't re-trigger
+      const url = window.location.pathname;
+      window.history.replaceState({}, "", url);
+    }
+  }, [search]);
 
   const { data: articles = [] } = useQuery<Article[]>({
     queryKey: ["articles"],
@@ -31,27 +47,31 @@ export function ArticlesPage() {
   });
 
   const generate = useMutation({
-    mutationFn: (body: QuizAnswers & { companyId?: string; targetKeyword: string; secondaryKeywords: string[] }) =>
-      api.post<Article>("/api/articles/generate", body),
+    mutationFn: (body: ArticleFormPayload) => api.post<Article>("/api/articles/generate", body),
     onSuccess: (a) => {
       qc.invalidateQueries({ queryKey: ["articles"] });
-      setOpenQuiz(false);
+      setOpenForm(false);
       toast({ title: "Article generated", description: a.title });
       window.location.href = `/articles/${a.id}`;
     },
     onError: (e: Error) => toast({ title: "Generation failed", description: e.message, variant: "destructive" }),
   });
 
+  const handleOpen = (open: boolean) => {
+    setOpenForm(open);
+    if (!open) setPrefill({});
+  };
+
   return (
     <div className="p-8 max-w-7xl mx-auto">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-3xl font-extrabold font-display text-foreground mb-1">Article Generator</h1>
+          <h1 className="text-3xl font-extrabold font-display text-foreground mb-1">Articles</h1>
           <p className="text-sm text-muted-foreground">
-            Answer a few questions, get a full SEO article written in the Brand Design voice.
+            Pick a company + keyword and generate a full SEO article in their brand voice.
           </p>
         </div>
-        <Button onClick={() => setOpenQuiz(true)}>
+        <Button onClick={() => setOpenForm(true)}>
           <Plus className="w-4 h-4 mr-1.5" /> Generate Article
         </Button>
       </div>
@@ -63,8 +83,8 @@ export function ArticlesPage() {
               <FileText className="w-6 h-6 text-[hsl(36_95%_57%)]" />
             </div>
             <p className="text-sm text-muted-foreground mb-1">No articles yet.</p>
-            <p className="text-xs text-muted-foreground mb-4">Answer a few questions and generate your first article.</p>
-            <Button onClick={() => setOpenQuiz(true)}>Generate your first article</Button>
+            <p className="text-xs text-muted-foreground mb-4">Pick a company + target keyword and generate one in seconds.</p>
+            <Button onClick={() => setOpenForm(true)}>Generate your first article</Button>
           </CardContent>
         </Card>
       ) : (
@@ -96,12 +116,17 @@ export function ArticlesPage() {
         </div>
       )}
 
-      <Dialog open={openQuiz} onOpenChange={setOpenQuiz}>
-        <DialogContent className="max-w-3xl">
+      <Dialog open={openForm} onOpenChange={handleOpen}>
+        <DialogContent className="max-w-2xl">
           <DialogHeader>
             <DialogTitle>Generate Article</DialogTitle>
           </DialogHeader>
-          <ArticleQuiz onSubmit={(d) => generate.mutate(d)} submitting={generate.isPending} />
+          <ArticleForm
+            onSubmit={(d) => generate.mutate(d)}
+            submitting={generate.isPending}
+            initialTargetKeyword={prefill.targetKeyword}
+            initialCompanyId={prefill.companyId}
+          />
         </DialogContent>
       </Dialog>
     </div>
