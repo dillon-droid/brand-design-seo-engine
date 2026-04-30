@@ -94,6 +94,8 @@ export const articles = pgTable(
     seoScore: integer("seo_score").default(0).notNull(),
     wordCount: integer("word_count").default(0).notNull(),
     quizAnswers: jsonb("quiz_answers").$type<Record<string, string>>().default({}).notNull(),
+    schemaJsonLd: text("schema_json_ld").default("").notNull(),
+    voiceReview: jsonb("voice_review").$type<unknown>(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (t) => ({ companyIdx: index("a_company_idx").on(t.companyId) }),

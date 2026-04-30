@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { CompanyForm, type CompanyFormData } from "@/components/CompanyForm";
 import { GoogleConnect } from "@/components/GoogleConnect";
+import { PageSpeedBadge } from "@/components/PageSpeedBadge";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { formatNumber } from "@/lib/utils";
@@ -146,11 +147,37 @@ export function CompanyDetailPage({ id }: { id: string }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [company_domain, googleStatus?.connected]);
 
-  if (isLoading) return <div className="p-10 text-muted-foreground">Loading…</div>;
+  if (isLoading) {
+    return (
+      <div className="p-8 max-w-7xl mx-auto">
+        <div className="animate-pulse space-y-4">
+          <div className="h-4 bg-secondary rounded w-32" />
+          <div className="flex items-start gap-4">
+            <div className="w-14 h-14 bg-secondary rounded-xl" />
+            <div className="space-y-2 flex-1">
+              <div className="h-7 bg-secondary rounded w-1/3" />
+              <div className="h-3 bg-secondary rounded w-1/4" />
+            </div>
+          </div>
+          <div className="grid grid-cols-4 gap-4 mt-6">
+            {[0, 1, 2, 3].map((i) => <div key={i} className="h-20 bg-secondary rounded-xl" />)}
+          </div>
+          <div className="h-32 bg-secondary rounded-xl" />
+          <div className="h-64 bg-secondary rounded-xl" />
+        </div>
+      </div>
+    );
+  }
   if (!company) return <div className="p-10 text-muted-foreground">Company not found.</div>;
 
   const targeted = savedKeywords.filter((k) => k.targeted);
   const notTargeted = savedKeywords.filter((k) => !k.targeted);
+
+  // Map keyword (lowercase) → article id, so we can show "Article exists" badges
+  const articleByKeyword = new Map<string, string>();
+  for (const a of articles) {
+    if (a.targetKeyword) articleByKeyword.set(a.targetKeyword.toLowerCase(), a.id);
+  }
 
   const goToArticle = (keyword: string) => {
     const params = new URLSearchParams({ keyword, companyId: id });
@@ -298,14 +325,17 @@ export function CompanyDetailPage({ id }: { id: string }) {
                     <div key={i} className="flex items-center gap-3 py-2 text-xs">
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-foreground truncate">{r.query}</div>
-                        <a
-                          href={r.page}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[10px] text-[hsl(0_0%_45%)] hover:text-[hsl(36_95%_57%)] flex items-center gap-1 truncate"
-                        >
-                          {r.page} <ExternalLink className="w-2.5 h-2.5" />
-                        </a>
+                        <div className="flex items-center gap-2">
+                          <a
+                            href={r.page}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[10px] text-[hsl(0_0%_45%)] hover:text-[hsl(36_95%_57%)] flex items-center gap-1 truncate"
+                          >
+                            {r.page} <ExternalLink className="w-2.5 h-2.5" />
+                          </a>
+                          <PageSpeedBadge url={r.page} />
+                        </div>
                       </div>
                       <div className="hidden md:flex items-center gap-3 text-[hsl(0_0%_55%)] shrink-0">
                         <span>Impr {formatNumber(r.impressions)}</span>
@@ -387,7 +417,13 @@ export function CompanyDetailPage({ id }: { id: string }) {
             ) : (
               <div className="divide-y divide-border">
                 {targeted.map((k) => (
-                  <KeywordRow key={k.id} k={k} onToggleTarget={() => toggleTargeted.mutate(k)} onArticle={() => goToArticle(k.keyword)} />
+                  <KeywordRow
+                    key={k.id}
+                    k={k}
+                    onToggleTarget={() => toggleTargeted.mutate(k)}
+                    onArticle={() => goToArticle(k.keyword)}
+                    existingArticleId={articleByKeyword.get(k.keyword.toLowerCase())}
+                  />
                 ))}
               </div>
             )}
@@ -501,29 +537,44 @@ function KeywordRow({
   k,
   onToggleTarget,
   onArticle,
+  existingArticleId,
 }: {
   k: SavedKeyword;
   onToggleTarget: () => void;
   onArticle: () => void;
+  existingArticleId?: string;
 }) {
   return (
     <div className="flex items-center gap-3 py-2.5">
-      <Target
-        className={`w-4 h-4 cursor-pointer ${k.targeted ? "text-[hsl(36_95%_57%)]" : "text-[hsl(0_0%_30%)]"}`}
-        onClick={onToggleTarget}
-        aria-label={k.targeted ? "Mark not targeted" : "Mark targeted"}
-      />
+      <button type="button" onClick={onToggleTarget} className="shrink-0" aria-label={k.targeted ? "Mark not targeted" : "Mark targeted"}>
+        <Target className={`w-4 h-4 ${k.targeted ? "text-[hsl(36_95%_57%)]" : "text-[hsl(0_0%_30%)]"}`} />
+      </button>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-semibold text-foreground truncate">{k.keyword}</div>
+        <div className="text-sm font-semibold text-foreground truncate flex items-center gap-2">
+          {k.keyword}
+          {existingArticleId && (
+            <Badge variant="success" className="shrink-0 text-[9px]">
+              <FileText className="w-2.5 h-2.5 mr-0.5" /> Article
+            </Badge>
+          )}
+        </div>
         {k.rationale && <div className="text-[11px] text-[hsl(0_0%_50%)] mt-0.5 line-clamp-1">{k.rationale}</div>}
       </div>
       <div className="hidden md:flex items-center gap-3 text-[11px] text-[hsl(0_0%_55%)]">
         {k.searchVolume != null && <span>Vol {formatNumber(k.searchVolume)}</span>}
         {k.difficulty != null && <span>KD {k.difficulty}</span>}
       </div>
-      <Button size="sm" variant="outline" onClick={onArticle}>
-        <FileText className="w-3 h-3 mr-1" /> Article
-      </Button>
+      {existingArticleId ? (
+        <Link href={`/articles/${existingArticleId}`}>
+          <Button size="sm" variant="outline" asChild={false}>
+            <FileText className="w-3 h-3 mr-1" /> View
+          </Button>
+        </Link>
+      ) : (
+        <Button size="sm" variant="outline" onClick={onArticle}>
+          <FileText className="w-3 h-3 mr-1" /> Article
+        </Button>
+      )}
     </div>
   );
 }

@@ -1,11 +1,13 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Link, useSearch } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, FileText, Plus } from "lucide-react";
+import { ArrowRight, FileText, Plus, Search } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { ArticleForm, type ArticleFormPayload } from "@/components/ArticleForm";
+import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { api } from "@/lib/api";
 import { toast } from "@/components/ui/use-toast";
 import { Badge } from "@/components/ui/badge";
@@ -41,10 +43,31 @@ export function ArticlesPage() {
     }
   }, [search]);
 
-  const { data: articles = [] } = useQuery<Article[]>({
+  const { data: articles = [], isLoading: articlesLoading } = useQuery<Article[]>({
     queryKey: ["articles"],
     queryFn: () => api.get<Article[]>("/api/articles"),
   });
+
+  const { data: companies = [] } = useQuery<Array<{ id: string; name: string }>>({
+    queryKey: ["companies"],
+    queryFn: () => api.get("/api/companies"),
+  });
+
+  const [filterText, setFilterText] = useState("");
+  const [filterCompany, setFilterCompany] = useState("all");
+
+  const filteredArticles = useMemo(() => {
+    const q = filterText.trim().toLowerCase();
+    return articles.filter((a) => {
+      if (filterCompany !== "all" && a.companyId !== filterCompany) return false;
+      if (!q) return true;
+      return (
+        a.title.toLowerCase().includes(q) ||
+        a.targetKeyword.toLowerCase().includes(q) ||
+        a.metaDescription.toLowerCase().includes(q)
+      );
+    });
+  }, [articles, filterText, filterCompany]);
 
   const generate = useMutation({
     mutationFn: (body: ArticleFormPayload) => api.post<Article>("/api/articles/generate", body),
@@ -76,7 +99,45 @@ export function ArticlesPage() {
         </Button>
       </div>
 
-      {articles.length === 0 ? (
+      {articles.length > 0 && (
+        <Card className="mb-4">
+          <CardContent className="p-3 flex items-center gap-3">
+            <div className="relative flex-1 max-w-md">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-[hsl(0_0%_50%)] pointer-events-none" />
+              <Input
+                value={filterText}
+                onChange={(e) => setFilterText(e.target.value)}
+                placeholder="Search title, keyword, or meta…"
+                className="pl-9"
+              />
+            </div>
+            <Select value={filterCompany} onValueChange={setFilterCompany}>
+              <SelectTrigger className="max-w-sm"><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All companies</SelectItem>
+                {companies.map((c) => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <span className="text-xs text-muted-foreground shrink-0">
+              {filteredArticles.length} of {articles.length}
+            </span>
+          </CardContent>
+        </Card>
+      )}
+
+      {articlesLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          {[0, 1, 2, 3].map((i) => (
+            <Card key={i}><CardContent className="p-5">
+              <div className="animate-pulse space-y-3">
+                <div className="h-4 bg-secondary rounded w-3/4" />
+                <div className="h-3 bg-secondary rounded w-1/2" />
+                <div className="h-3 bg-secondary rounded w-1/3" />
+              </div>
+            </CardContent></Card>
+          ))}
+        </div>
+      ) : articles.length === 0 ? (
         <Card>
           <CardContent className="py-16 text-center">
             <div className="mx-auto w-12 h-12 rounded-xl bg-[hsl(36_95%_57%/0.12)] flex items-center justify-center mb-3">
@@ -87,9 +148,11 @@ export function ArticlesPage() {
             <Button onClick={() => setOpenForm(true)}>Generate your first article</Button>
           </CardContent>
         </Card>
+      ) : filteredArticles.length === 0 ? (
+        <div className="text-sm text-muted-foreground text-center py-12">No articles match your filters.</div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {articles.map((a) => (
+          {filteredArticles.map((a) => (
             <Link key={a.id} href={`/articles/${a.id}`}>
               <Card className="hover:border-[hsl(36_95%_57%/0.3)] transition-colors cursor-pointer group">
                 <CardContent className="p-5">

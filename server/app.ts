@@ -14,8 +14,10 @@ import {
   verifyPassword,
   type AuthedUser,
 } from "./lib/auth";
-import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords } from "./lib/ai";
+import { suggestKeywords, researchKeyword, generateArticle, suggestSecondaryKeywords, reviewArticleVoice } from "./lib/ai";
 import { fetchRankings, mineOpportunities, listSites } from "./lib/gsc";
+import { checkPageSpeedBoth } from "./lib/pagespeed";
+import { notifyIndexing } from "./lib/indexing";
 import {
   buildAuthUrl,
   disconnect as disconnectGoogle,
@@ -415,6 +417,7 @@ app.post("/articles/generate", async (c) => {
       html: article.html,
       seoScore: article.seoScore,
       wordCount: article.wordCount,
+      schemaJsonLd: article.schemaJsonLd ?? "",
       quizAnswers: {
         whoIsTheReader: data.whoIsTheReader,
         whatProblem: data.whatProblem,
@@ -427,6 +430,43 @@ app.post("/articles/generate", async (c) => {
     })
     .returning();
   return c.json(row);
+});
+
+// ---- ARTICLE: store generated schemaJsonLd ----
+// (handled in /articles/generate by saving schemaJsonLd from AI output)
+
+// ---- ARTICLE VOICE REVIEW ----
+app.post("/articles/:id/review", async (c) => {
+  const id = c.req.param("id");
+  const rows = await db.select().from(schema.articles).where(eq(schema.articles.id, id)).limit(1);
+  const article = rows[0];
+  if (!article) return c.json({ error: "Article not found" }, 404);
+  const company = await loadCompany(article.companyId);
+  const review = await reviewArticleVoice({
+    company,
+    article: { title: article.title, markdown: article.markdown, targetKeyword: article.targetKeyword },
+  });
+  await db.update(schema.articles).set({ voiceReview: review }).where(eq(schema.articles.id, id));
+  return c.json(review);
+});
+
+// ---- PAGESPEED ----
+app.post("/pagespeed", async (c) => {
+  const { url } = await c.req.json();
+  if (!url) return c.json({ error: "url required" }, 400);
+  const out = await checkPageSpeedBoth(url);
+  return c.json(out);
+});
+
+// ---- INDEXING API ----
+app.post("/indexing/submit", async (c) => {
+  const u = c.get("user");
+  const auth = await getUserClient(u.id);
+  if (!auth) return c.json({ error: "Connect your Google account first." }, 400);
+  const { url, type } = await c.req.json();
+  if (!url) return c.json({ error: "url required" }, 400);
+  const out = await notifyIndexing({ auth, url, type: type === "URL_DELETED" ? "URL_DELETED" : "URL_UPDATED" });
+  return c.json(out);
 });
 
 // ---- DASHBOARD ----

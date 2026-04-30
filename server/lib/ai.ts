@@ -263,6 +263,7 @@ export type GeneratedArticle = {
   html: string;
   seoScore: number;
   wordCount: number;
+  schemaJsonLd: string;
 };
 
 const ARTICLE_SCHEMA = {
@@ -274,8 +275,9 @@ const ARTICLE_SCHEMA = {
     html: { type: Type.STRING },
     seoScore: { type: Type.NUMBER },
     wordCount: { type: Type.NUMBER },
+    schemaJsonLd: { type: Type.STRING },
   },
-  propertyOrdering: ["title", "metaDescription", "markdown", "html", "seoScore", "wordCount"],
+  propertyOrdering: ["title", "metaDescription", "markdown", "html", "seoScore", "wordCount", "schemaJsonLd"],
 };
 
 export async function generateArticle({
@@ -305,6 +307,8 @@ export async function generateArticle({
 - Include internal linking suggestions in [brackets]
 
 For "html", return semantic HTML for the article body only — no <html>/<body> wrapper. For "title" stay under 60 chars. For "metaDescription" stay 150-160 chars.
+
+For "schemaJsonLd", return a stringified JSON-LD payload that includes the appropriate schema.org types for this article: an "Article" object (with headline, description, articleBody summary, datePublished as today's ISO date, author as the company name) PLUS an "FAQPage" object IF the article includes a Q&A/FAQ section (one Question/Answer per FAQ entry). Wrap the two in an "@graph" array. Use proper escaping. The string itself should be valid JSON that can be embedded in a <script type="application/ld+json"> tag.
 
 CLIENT BRAND CONTEXT:
 ${brandContext(company)}`;
@@ -340,5 +344,80 @@ Write the article.`.trim();
   const out = parseJson<GeneratedArticle>(r.text ?? "");
   if (!out.wordCount) out.wordCount = (out.markdown || "").split(/\s+/).filter(Boolean).length;
   if (!out.seoScore) out.seoScore = 75;
+  if (!out.schemaJsonLd) out.schemaJsonLd = "";
   return out;
+}
+
+export type VoiceReview = {
+  score: number; // 0-100 — how on-brand
+  summary: string;
+  strengths: string[];
+  issues: Array<{ severity: "low" | "medium" | "high"; quote: string; problem: string; suggestion: string }>;
+};
+
+const REVIEW_SCHEMA = {
+  type: Type.OBJECT,
+  properties: {
+    score: { type: Type.NUMBER },
+    summary: { type: Type.STRING },
+    strengths: { type: Type.ARRAY, items: { type: Type.STRING } },
+    issues: {
+      type: Type.ARRAY,
+      items: {
+        type: Type.OBJECT,
+        properties: {
+          severity: { type: Type.STRING },
+          quote: { type: Type.STRING },
+          problem: { type: Type.STRING },
+          suggestion: { type: Type.STRING },
+        },
+        propertyOrdering: ["severity", "quote", "problem", "suggestion"],
+      },
+    },
+  },
+  propertyOrdering: ["score", "summary", "strengths", "issues"],
+};
+
+export async function reviewArticleVoice({
+  company,
+  article,
+}: {
+  company: Company | null;
+  article: { title: string; markdown: string; targetKeyword: string };
+}): Promise<VoiceReview> {
+  const sys = `You are a senior brand-voice editor at Brand Design Co. Review the article below and check whether it actually matches the client's saved StoryBrand BrandScript and brand voice. Be specific, surgical, and honest — but constructive.
+
+Score 0-100 (100 = perfectly on-brand).
+List 3-5 strengths (what's working).
+List specific issues with verbatim quotes from the article, classified by severity:
+- high: outright contradicts the BrandScript or violates the brand voice
+- medium: mismatch in tone/audience/positioning that would feel "off" to the client
+- low: minor wording, missed opportunity to reinforce the brand
+
+For each issue: provide the exact quote from the article, what's wrong, and a concrete one-line suggestion.
+
+CLIENT BRAND CONTEXT:
+${brandContext(company)}
+
+Return JSON only.`;
+
+  const r = await generateWithRetry(
+    {
+      model: MODELS.fast,
+      contents: `Article title: "${article.title}"\nTarget keyword: ${article.targetKeyword}\n\nArticle (markdown):\n${article.markdown}`,
+      config: {
+        systemInstruction: sys,
+        responseMimeType: "application/json",
+        responseSchema: REVIEW_SCHEMA,
+      },
+    },
+    { fallbackChain: FAST_CHAIN },
+  );
+  const out = parseJson<VoiceReview>(r.text ?? "");
+  return {
+    score: out.score ?? 0,
+    summary: out.summary ?? "",
+    strengths: out.strengths ?? [],
+    issues: out.issues ?? [],
+  };
 }
